@@ -1,6 +1,9 @@
 const path = require("node:path");
+const dotenv = require("dotenv");
 
 const ROOT = path.join(__dirname, "..", "..");
+
+dotenv.config({ path: path.join(ROOT, ".env") });
 
 // Every setting is read through one of these three so the whole configuration
 // surface stays visible in a single file, and so a typo in the environment
