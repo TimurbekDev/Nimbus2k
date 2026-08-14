@@ -1,0 +1,17 @@
+<%#
+  One deploy outcome, rendered the same way everywhere it appears.
+  Locals: status, and an optional `size` of "sm".
+%>
+<%
+  const TONE = { success: "ok", failed: "bad", running: "warn", cancelled: "idle" };
+  const ICON = { success: "check-circle", failed: "alert-circle", running: "activity", cancelled: "x" };
+  const tone = TONE[status] || "idle";
+%>
+<span class="badge <%= tone %>">
+    <% if (status === "running") { %>
+    <span class="dot pulse"></span>
+    <% } else { %>
+    <svg class="i" aria-hidden="true"><use href="#i-<%= ICON[status] || "info" %>"></use></svg>
+    <% } %>
+    <%= status %>
+</span>

@@ -18,7 +18,7 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           script: |
             set -e
-            cd /srv/projects/deploy-server
+            cd /srv/projects/nimbus2k
             git checkout -- .
             git pull origin main
             docker compose up -d --build

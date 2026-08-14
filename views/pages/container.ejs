@@ -1,0 +1,327 @@
+<%- include("../partials/head", {
+    title: title,
+    nav: nav,
+    crumbs: [
+        { label: "Fleet", href: "/ui/containers" },
+        { label: container.stack || "standalone", href: container.stack ? "/ui/containers?by=stack&q=" + encodeURIComponent(container.stack) : "/ui/containers" },
+        { label: container.name },
+    ],
+}) %>
+
+<% const back = "/ui/containers/" + encodeURIComponent(container.name); %>
+
+<div class="detail-hero">
+    <div>
+        <h1>
+            <span class="crow-state <%= container.health === "unhealthy" ? "bad" : container.tone %>">
+                <span class="dot <%= container.running ? "pulse" : "" %>"></span>
+            </span>
+            <%= container.name %>
+        </h1>
+
+        <div class="row tight" style="margin-top:8px">
+            <span class="badge <%= container.running ? "ok" : "idle" %>"><%= container.state %></span>
+            <% if (container.health) { %>
+            <span class="badge <%= container.health === "healthy" ? "ok" : container.health === "unhealthy" ? "bad" : "warn" %>"><%= container.health %></span>
+            <% } %>
+            <% if (container.group) { %>
+            <span class="badge hue g-<%= container.group.color %>"><span class="swatch"></span><%= container.group.name %></span>
+            <% } %>
+            <% if (container.stack) { %>
+            <span class="badge plain"><svg class="i" aria-hidden="true"><use href="#i-layers"></use></svg><%= container.stack %></span>
+            <% } %>
+            <% if (container.service) { %>
+            <span class="badge plain"><%= container.service %></span>
+            <% } %>
+        </div>
+
+        <p class="sub"><%= container.status %></p>
+        <% if (container.note) { %>
+        <p class="t-sm muted"><svg class="i sm" aria-hidden="true"><use href="#i-tag"></use></svg> <%= container.note %></p>
+        <% } %>
+    </div>
+
+    <div class="detail-actions">
+        <% if (canAct) { %>
+        <% if (container.running) { %>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="hidden" name="action" value="restart">
+            <button class="btn" type="submit" data-confirm="Restart <%= container.name %>?">
+                <svg class="i" aria-hidden="true"><use href="#i-rotate"></use></svg>
+                Restart
+            </button>
+        </form>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="hidden" name="action" value="stop">
+            <button class="btn ghost" type="submit" data-confirm="Stop <%= container.name %>?">
+                <svg class="i" aria-hidden="true"><use href="#i-square"></use></svg>
+                Stop
+            </button>
+        </form>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="hidden" name="action" value="<%= container.state === "paused" ? "unpause" : "pause" %>">
+            <button class="btn ghost" type="submit">
+                <svg class="i" aria-hidden="true"><use href="#i-pause"></use></svg>
+                <%= container.state === "paused" ? "Resume" : "Pause" %>
+            </button>
+        </form>
+        <% } else { %>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="hidden" name="action" value="start">
+            <button class="btn" type="submit">
+                <svg class="i" aria-hidden="true"><use href="#i-play"></use></svg>
+                Start
+            </button>
+        </form>
+        <% } %>
+
+        <% if (canDestroy) { %>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="/ui/containers">
+            <input type="hidden" name="action" value="remove">
+            <button class="btn danger" type="submit"
+                    data-confirm="Remove <%= container.name %>? This cannot be undone. Data in named volumes survives; anything written to the container filesystem does not.">
+                <svg class="i" aria-hidden="true"><use href="#i-trash"></use></svg>
+                Remove
+            </button>
+        </form>
+        <% } %>
+        <% } %>
+
+        <a class="btn ghost" href="/ui/containers/<%= encodeURIComponent(container.name) %>/logs?tail=5000"
+           target="_blank" rel="noopener">
+            <svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>
+            Raw log
+        </a>
+    </div>
+</div>
+
+<div class="grid-main">
+    <div class="stack">
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-terminal"></use></svg>
+                    Live output
+                </h2>
+                <div class="log-tools">
+                    <label class="check inline">
+                        <input type="checkbox" id="follow-container" checked>
+                        <span>follow</span>
+                    </label>
+                    <button class="btn ghost sm" type="button" data-copy="<%= container.id %>">
+                        <svg class="i sm" aria-hidden="true"><use href="#i-copy"></use></svg>
+                        Copy id
+                    </button>
+                </div>
+            </div>
+            <div class="log-shell">
+                <pre class="log" id="container-log" data-ref="<%= container.name %>" tabindex="0"><%= log || "(no output yet)" %></pre>
+            </div>
+            <div class="card-foot">
+                Streamed straight from <code>docker logs --follow</code>. The last 400 lines are shown on load.
+            </div>
+        </div>
+
+        <% if (detail) { %>
+        <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-key"></use></svg> Environment</h2>
+                <span class="badge plain"><%= detail.env.length %> variables</span>
+            </div>
+            <div class="card-body">
+                <% if (detail.env.length === 0) { %>
+                <p class="muted t-sm">No environment variables are set on this container.</p>
+                <% } else { %>
+                <dl class="env-row">
+                    <% detail.env.forEach(function (entry) { %>
+                    <dt><%= entry.key %></dt>
+                    <dd>
+                        <% if (entry.secret) { %>
+                        <span class="secret">
+                            <span>••••••••</span>
+                            <button type="button" data-secret="<%= entry.value %>" data-shown="0">reveal</button>
+                        </span>
+                        <% } else { %><%= entry.value %><% } %>
+                    </dd>
+                    <% }) %>
+                </dl>
+                <p class="t-xs dim" style="margin-top:10px">
+                    Values that look like a credential are masked until you ask for them.
+                </p>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-disk"></use></svg> Mounts</h2></div>
+                <div class="card-body stack tight">
+                    <% if (detail.mounts.length === 0) { %>
+                    <p class="muted t-sm">Nothing is mounted into this container.</p>
+                    <% } %>
+                    <% detail.mounts.forEach(function (mount) { %>
+                    <div class="col">
+                        <div class="row tight">
+                            <span class="badge plain"><%= mount.type %></span>
+                            <% if (mount.readonly) { %><span class="badge idle">read-only</span><% } %>
+                            <code class="t-xs"><%= mount.destination %></code>
+                        </div>
+                        <span class="t-xs dim truncate" title="<%= mount.source %>"><%= mount.source %></span>
+                    </div>
+                    <% }) %>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg> Networks</h2></div>
+                <div class="card-body stack tight">
+                    <% detail.networks.forEach(function (net) { %>
+                    <div class="member">
+                        <svg class="i sm" aria-hidden="true"><use href="#i-globe"></use></svg>
+                        <span class="truncate"><%= net.name %></span>
+                        <span class="tail"><code class="t-xs"><%= net.ip || "—" %></code></span>
+                    </div>
+                    <% }) %>
+                    <% if (detail.networks.length === 0) { %>
+                    <p class="muted t-sm">Not attached to any network.</p>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+        <% } %>
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-info"></use></svg> Details</h2></div>
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>Id</dt><dd><code class="t-xs"><%= container.short %></code></dd>
+                    <dt>Image</dt><dd class="truncate" title="<%= container.image %>"><%= container.image %></dd>
+                    <dt>Created</dt><dd><%= container.createdAt %></dd>
+                    <% if (container.running) { %>
+                    <dt>Uptime</dt><dd><%= container.uptime %></dd>
+                    <% } else if (container.exitCode !== null) { %>
+                    <dt>Exit code</dt><dd><span class="badge <%= container.exitCode === 0 ? "idle" : "bad" %>"><%= container.exitCode %></span></dd>
+                    <% } %>
+                    <% if (detail) { %>
+                    <dt>Restarts</dt><dd><%= detail.restartCount %> <span class="dim">· policy <%= detail.restartPolicy %></span></dd>
+                    <% if (detail.command) { %><dt>Command</dt><dd><code class="t-xs"><%= fmt.truncate(detail.command, 90) %></code></dd><% } %>
+                    <% if (detail.user) { %><dt>User</dt><dd><code class="t-xs"><%= detail.user %></code></dd><% } %>
+                    <% } %>
+                    <% if (container.stats) { %>
+                    <dt>CPU</dt><dd><%= container.stats.cpu.toFixed(1) %>%</dd>
+                    <dt>Memory</dt><dd><%= container.stats.mem %> <span class="dim">(<%= container.stats.memPercent.toFixed(1) %>%)</span></dd>
+                    <dt>Network I/O</dt><dd><%= container.stats.net %></dd>
+                    <dt>Processes</dt><dd><%= container.stats.pids %></dd>
+                    <% } %>
+                </dl>
+            </div>
+        </div>
+
+        <% if (container.ports.length > 0) { %>
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-link"></use></svg> Ports</h2></div>
+            <div class="card-body stack tight">
+                <% container.ports.forEach(function (port) { %>
+                <div class="member">
+                    <span class="badge <%= port.public ? "info" : "plain" %> mono">
+                        <%= port.published ? (port.host || "0.0.0.0") + ":" + port.published : "—" %>
+                    </span>
+                    <svg class="i sm" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+                    <span class="mono t-sm"><%= port.container %>/<%= port.protocol %></span>
+                    <span class="tail">
+                        <% if (!port.published) { %><span class="badge idle">internal</span><% } %>
+                    </span>
+                </div>
+                <% }) %>
+            </div>
+        </div>
+        <% } %>
+
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-folder"></use></svg> Grouping</h2></div>
+            <div class="card-body">
+                <form class="form-grid" method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/meta">
+                    <input type="hidden" name="back" value="<%= back %>">
+
+                    <label class="field">
+                        Group
+                        <select name="group_id">
+                            <option value="">No group</option>
+                            <% groups.forEach(function (group) { %>
+                            <option value="<%= group.id %>" <%= container.group && container.group.id === group.id ? "selected" : "" %>>
+                                <%= group.name %>
+                            </option>
+                            <% }) %>
+                        </select>
+                        <span class="hint">Your own grouping, independent of the compose stack.</span>
+                    </label>
+
+                    <label class="field">
+                        Note
+                        <input type="text" name="note" value="<%= container.note || "" %>" maxlength="280"
+                               placeholder="Why this container matters" autocomplete="off">
+                    </label>
+
+                    <label class="check">
+                        <input type="checkbox" name="pinned" <%= container.pinned ? "checked" : "" %>>
+                        <span>
+                            <span class="title">Pin to the top</span>
+                            <span class="hint">Keeps it first inside its bucket, whatever the sort.</span>
+                        </span>
+                    </label>
+
+                    <div class="form-actions">
+                        <button class="btn" type="submit">Save</button>
+                        <% if (groups.length === 0) { %>
+                        <a class="btn quiet sm" href="/ui/groups">Create a group first</a>
+                        <% } %>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <% if (detail && detail.health) { %>
+        <div class="card <%= detail.health.status === "unhealthy" ? "danger" : "" %>">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-activity"></use></svg> Health checks</h2>
+                <span class="badge <%= detail.health.status === "healthy" ? "ok" : "bad" %>"><%= detail.health.status %></span>
+            </div>
+            <div class="card-body stack tight">
+                <% detail.health.last.forEach(function (probe) { %>
+                <div class="col">
+                    <div class="row tight">
+                        <span class="badge <%= probe.ExitCode === 0 ? "ok" : "bad" %>">exit <%= probe.ExitCode %></span>
+                        <span class="t-xs dim"><%= probe.Start ? probe.Start.slice(0, 19).replace("T", " ") : "" %></span>
+                    </div>
+                    <% if (probe.Output) { %>
+                    <code class="t-xs"><%= fmt.truncate(probe.Output.trim(), 160) %></code>
+                    <% } %>
+                </div>
+                <% }) %>
+            </div>
+        </div>
+        <% } %>
+
+        <% if (Object.keys(container.labels).length > 0) { %>
+        <details class="disclosure">
+            <summary><svg class="i" aria-hidden="true"><use href="#i-tag"></use></svg> Labels (<%= Object.keys(container.labels).length %>)</summary>
+            <div class="body">
+                <dl class="env-row">
+                    <% Object.entries(container.labels).forEach(function (entry) { %>
+                    <dt><%= entry[0] %></dt><dd><%= fmt.truncate(entry[1], 120) %></dd>
+                    <% }) %>
+                </dl>
+            </div>
+        </details>
+        <% } %>
+    </div>
+</div>
+
+<%- include("../partials/foot") %>

@@ -1,0 +1,371 @@
+<%- include("../partials/head", { title: title, nav: nav }) %>
+
+<div class="page-head">
+    <div>
+        <h1>Overview</h1>
+        <p class="lede">
+            Every repository <%= app.name %> deploys and every container running on this host,
+            in one place.
+        </p>
+    </div>
+
+    <div class="row tight">
+        <a class="btn ghost" href="/ui/containers">
+            <svg class="i" aria-hidden="true"><use href="#i-box"></use></svg>
+            Fleet
+        </a>
+        <a class="btn" href="/ui/projects">
+            <svg class="i" aria-hidden="true"><use href="#i-git"></use></svg>
+            Projects
+        </a>
+    </div>
+</div>
+
+<%# The whole page refreshes itself; the daemon changes without telling anyone. %>
+<div data-refresh="12" hidden></div>
+
+<div class="grid-4">
+    <div class="tile info">
+        <span class="tile-label">
+            <svg class="i sm" aria-hidden="true"><use href="#i-git"></use></svg>
+            Projects
+        </span>
+        <span class="tile-value"><%= projects.length %></span>
+        <span class="tile-note">
+            <%= projects.filter(function (p) { return p.enabled; }).length %> enabled ·
+            <%= projects.filter(function (p) { return !p.enabled; }).length %> paused
+        </span>
+    </div>
+
+    <div class="tile <%= fleet.ok ? (fleet.totals.unhealthy > 0 ? "bad" : "ok") : "warn" %>">
+        <span class="tile-label">
+            <svg class="i sm" aria-hidden="true"><use href="#i-box"></use></svg>
+            Containers
+        </span>
+        <% if (fleet.ok) { %>
+        <span class="tile-value"><%= fleet.totals.running %><small> / <%= fleet.totals.total %></small></span>
+        <span class="tile-note">
+            <% if (fleet.totals.unhealthy > 0) { %>
+            <span class="badge bad"><%= fleet.totals.unhealthy %> unhealthy</span>
+            <% } else if (fleet.totals.stopped > 0) { %>
+            <%= fleet.totals.stopped %> stopped
+            <% } else { %>all healthy<% } %>
+        </span>
+        <% } else { %>
+        <span class="tile-value">—</span>
+        <span class="tile-note">docker unreachable</span>
+        <% } %>
+    </div>
+
+    <div class="tile <%= stats.total && stats.failed / stats.total > 0.2 ? "warn" : "ok" %>">
+        <span class="tile-label">
+            <svg class="i sm" aria-hidden="true"><use href="#i-check-circle"></use></svg>
+            Deploy success
+        </span>
+        <span class="tile-value"><%= fmt.percent(stats.success, stats.total) %></span>
+        <span class="tile-note"><%= stats.success %> of <%= stats.total %> retained runs</span>
+    </div>
+
+    <div class="tile <%= active.length > 0 ? "warn" : "" %>">
+        <span class="tile-label">
+            <svg class="i sm" aria-hidden="true"><use href="#i-activity"></use></svg>
+            Running now
+        </span>
+        <span class="tile-value"><%= active.length %></span>
+        <span class="tile-note">
+            <%= stats.last24h %> deploys in the last 24h ·
+            avg <%= fmt.duration(stats.averageMs) %>
+        </span>
+    </div>
+</div>
+
+<% if (active.length > 0) { %>
+<div class="card accent">
+    <div class="card-head">
+        <h2><span class="dot pulse" style="color:var(--warn)"></span> Deploying now</h2>
+        <span class="badge warn"><%= active.length %> in flight</span>
+    </div>
+    <div class="card-body flush">
+        <table class="data">
+            <tbody>
+            <% active.forEach(function (item) { %>
+            <tr>
+                <td>
+                    <div class="cell-primary">
+                        <a href="/ui/projects/<%= encodeURIComponent(item.project) %>" class="strong"><%= item.project %></a>
+                        <span class="badge mono plain"><%= item.branch %></span>
+                    </div>
+                </td>
+                <td class="num muted" data-elapsed="<%= item.startedAt %>"><%= fmt.duration(item.elapsedMs) %></td>
+                <td class="right">
+                    <div class="cell-actions">
+                        <a class="btn ghost sm" href="/ui/deployments/<%= item.id %>">
+                            <svg class="i sm" aria-hidden="true"><use href="#i-terminal"></use></svg>
+                            Watch log
+                        </a>
+                        <form method="post" action="/ui/projects/<%= encodeURIComponent(item.project) %>/cancel">
+                            <input type="hidden" name="back" value="/ui">
+                            <button class="btn danger sm" type="submit" data-confirm="Cancel the running deploy?">Cancel</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            <% }) %>
+            </tbody>
+        </table>
+    </div>
+</div>
+<% } %>
+
+<div class="grid-main">
+    <div class="stack">
+        <%# ------------------------------------------------------------ fleet %>
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-layers"></use></svg>
+                    Stacks on this host
+                </h2>
+                <a class="btn ghost sm" href="/ui/containers">
+                    Open fleet
+                    <svg class="i sm" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+                </a>
+            </div>
+
+            <% if (!fleet.ok) { %>
+            <div class="card-body">
+                <div class="banner bad">
+                    <svg class="i" aria-hidden="true"><use href="#i-alert-circle"></use></svg>
+                    <div>
+                        <strong>The docker daemon is not reachable.</strong>
+                        <div class="t-sm muted" style="margin-top:4px"><%= fleet.error %></div>
+                        <div class="t-sm muted">Mount <code>/var/run/docker.sock</code> into the container to enable the fleet view.</div>
+                    </div>
+                </div>
+            </div>
+            <% } else if (fleet.buckets.length === 0) { %>
+            <div class="empty">
+                <svg class="i" aria-hidden="true"><use href="#i-box"></use></svg>
+                <h3>No containers</h3>
+                <p>Nothing is running on this host yet. A successful deploy will show up here.</p>
+            </div>
+            <% } else { %>
+            <div class="card-body flush">
+                <table class="data">
+                    <thead>
+                    <tr><th>Stack</th><th>Containers</th><th>CPU</th><th>Memory</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                    <% fleet.buckets.slice(0, 8).forEach(function (bucket) { %>
+                    <tr>
+                        <td>
+                            <div class="cell-primary">
+                                <svg class="i sm" aria-hidden="true" style="color:var(--text-3)"><use href="#i-layers"></use></svg>
+                                <a href="/ui/containers?by=stack&amp;q=<%= encodeURIComponent(bucket.stack || "") %>" class="strong truncate"><%= bucket.title %></a>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge <%= bucket.unhealthy ? "bad" : bucket.stopped ? "warn" : "ok" %>">
+                                <%= bucket.running %>/<%= bucket.total %> up
+                            </span>
+                        </td>
+                        <td class="num muted"><%= bucket.cpu.toFixed(1) %>%</td>
+                        <td class="num muted"><%= bucket.memory.toFixed(1) %>%</td>
+                        <td class="right">
+                            <a class="btn quiet icon sm" href="/ui/containers?by=stack&amp;q=<%= encodeURIComponent(bucket.stack || "") %>">
+                                <svg class="i sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                            </a>
+                        </td>
+                    </tr>
+                    <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } %>
+        </div>
+
+        <%# ------------------------------------------------------- recent runs %>
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-history"></use></svg>
+                    Recent deploys
+                </h2>
+                <a class="btn ghost sm" href="/ui/deployments">
+                    All deployments
+                    <svg class="i sm" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+                </a>
+            </div>
+
+            <% if (recent.length === 0) { %>
+            <div class="empty">
+                <svg class="i" aria-hidden="true"><use href="#i-history"></use></svg>
+                <h3>No deploys recorded yet</h3>
+                <p>Push to a registered repository, or deploy one by hand from its page.</p>
+            </div>
+            <% } else { %>
+            <div class="card-body flush">
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr><th>#</th><th>Project</th><th>Branch</th><th>Status</th><th>Started</th><th class="right">Took</th></tr>
+                        </thead>
+                        <tbody>
+                        <% recent.forEach(function (item) { %>
+                        <tr>
+                            <td><a href="/ui/deployments/<%= item.id %>" class="mono">#<%= item.id %></a></td>
+                            <td><a href="/ui/projects/<%= encodeURIComponent(item.project) %>"><%= item.project %></a></td>
+                            <td><span class="badge mono plain"><%= item.branch %></span></td>
+                            <td><%- include("../partials/status", { status: item.status }) %></td>
+                            <td class="muted">
+                                <time datetime="<%= fmt.iso(item.started_at) %>" data-ago
+                                      title="<%= fmt.stamp(item.started_at) %>"><%= fmt.ago(item.started_at) %></time>
+                            </td>
+                            <td class="num muted"><%= fmt.duration(item.duration_ms) %></td>
+                        </tr>
+                        <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <% } %>
+        </div>
+    </div>
+
+    <%# ------------------------------------------------------------- sidebar %>
+    <div class="stack">
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-activity"></use></svg>
+                    Last 14 days
+                </h2>
+            </div>
+            <div class="card-body">
+                <% const peak = Math.max(...activity.map(function (d) { return d.total; }), 1); %>
+                <div class="activity">
+                    <% activity.forEach(function (day) { %>
+                    <div class="bar <%= day.total === 0 ? "blank" : "" %>"
+                         title="<%= day.day %>: <%= day.total %> deploys, <%= day.failed %> failed">
+                        <% if (day.failed > 0) { %>
+                        <i class="fail" style="height: <%= Math.round((day.failed / peak) * 100) %>%"></i>
+                        <% } %>
+                        <i style="height: <%= Math.round(((day.total - day.failed) / peak) * 100) %>%"></i>
+                    </div>
+                    <% }) %>
+                </div>
+                <div class="row between t-xs dim" style="margin-top:8px">
+                    <span>14 days ago</span>
+                    <span><%= activity.reduce(function (sum, d) { return sum + d.total; }, 0) %> runs</span>
+                    <span>today</span>
+                </div>
+            </div>
+        </div>
+
+        <% if (attention.length > 0) { %>
+        <div class="card attention">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-alert-triangle"></use></svg>
+                    Needs attention
+                </h2>
+                <span class="badge warn"><%= attention.length %></span>
+            </div>
+            <div class="card-body stack tight">
+                <% attention.slice(0, 6).forEach(function (project) { %>
+                <div class="member">
+                    <svg class="i sm" aria-hidden="true"><use href="#i-git"></use></svg>
+                    <a href="/ui/projects/<%= encodeURIComponent(project.name) %>" class="truncate"><%= project.name %></a>
+                    <span class="tail">
+                        <% if (!project.enabled) { %><span class="badge idle">paused</span><% } %>
+                        <% if (project.last_status === "failed") { %>
+                        <a class="badge bad" href="/ui/deployments/<%= project.last_id %>">failed</a>
+                        <% } %>
+                    </span>
+                </div>
+                <% }) %>
+            </div>
+        </div>
+        <% } %>
+
+        <% if (unmanaged.length > 0) { %>
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-layers"></use></svg>
+                    Unmanaged stacks
+                </h2>
+            </div>
+            <div class="card-body stack tight">
+                <p class="t-sm muted">
+                    Running here, but no project deploys them. Register one to get push-to-deploy.
+                </p>
+                <% unmanaged.forEach(function (item) { %>
+                <div class="member">
+                    <svg class="i sm" aria-hidden="true"><use href="#i-box"></use></svg>
+                    <span class="truncate"><%= item.stack %></span>
+                    <span class="tail">
+                        <span class="badge plain"><%= item.containers %></span>
+                        <a class="btn quiet icon sm" href="/ui/containers?by=stack&amp;q=<%= encodeURIComponent(item.stack) %>">
+                            <svg class="i sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                        </a>
+                    </span>
+                </div>
+                <% }) %>
+            </div>
+        </div>
+        <% } %>
+
+        <% if (usage.ok) { %>
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-disk"></use></svg>
+                    Docker disk
+                </h2>
+                <a class="btn ghost sm" href="/ui/settings">Manage</a>
+            </div>
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>Images</dt><dd><%= usage.images.size %> <span class="dim">· <%= usage.images.reclaimable %> reclaimable</span></dd>
+                    <dt>Containers</dt><dd><%= usage.containers.size %></dd>
+                    <dt>Volumes</dt><dd><%= usage.volumes.size %></dd>
+                    <dt>Build cache</dt><dd><%= usage.cache.size %></dd>
+                </dl>
+            </div>
+        </div>
+        <% } %>
+
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-zap"></use></svg>
+                    Webhook deliveries
+                </h2>
+            </div>
+            <% if (deliveries.length === 0) { %>
+            <div class="empty" style="padding:26px 16px">
+                <svg class="i" aria-hidden="true"><use href="#i-zap"></use></svg>
+                <p class="t-sm">No deliveries yet. Point a GitHub webhook at <code>/webhook</code>.</p>
+            </div>
+            <% } else { %>
+            <div class="card-body stack tight">
+                <% deliveries.forEach(function (item) { %>
+                <div class="member">
+                    <span class="badge <%= item.outcome === "ignored" ? "idle" : item.outcome === "rejected" ? "bad" : "ok" %>"><%= item.outcome %></span>
+                    <span class="truncate"><%= item.repo || item.event %></span>
+                    <span class="tail dim t-xs">
+                        <time datetime="<%= fmt.iso(item.created_at) %>" data-ago><%= fmt.ago(item.created_at) %></time>
+                    </span>
+                </div>
+                <% if (item.detail) { %>
+                <div class="t-xs dim truncate" style="padding-left:9px"><%= item.detail %></div>
+                <% } %>
+                <% }) %>
+            </div>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<%- include("../partials/foot") %>

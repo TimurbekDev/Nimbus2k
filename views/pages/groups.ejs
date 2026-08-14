@@ -1,0 +1,218 @@
+<%- include("../partials/head", { title: title, nav: nav }) %>
+
+<div class="page-head">
+    <div>
+        <h1>Groups</h1>
+        <p class="lede">
+            A compose stack is one file. A group is whatever you say it is — projects and
+            containers from anywhere on the host, gathered so you can see and act on them
+            together.
+        </p>
+    </div>
+
+    <a class="btn" href="#new-group">
+        <svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>
+        New group
+    </a>
+</div>
+
+<% if (!dockerOk) { %>
+<div class="banner warn">
+    <svg class="i" aria-hidden="true"><use href="#i-alert-triangle"></use></svg>
+    <div>Container membership is unavailable: <%= dockerError %></div>
+</div>
+<% } %>
+
+<% if (groups.length === 0) { %>
+<div class="card">
+    <div class="empty">
+        <svg class="i" aria-hidden="true"><use href="#i-folder"></use></svg>
+        <h3>No groups yet</h3>
+        <p>
+            Groups cut across compose stacks: "customer-facing", "everything the billing team
+            owns", "restart these together after a database upgrade".
+        </p>
+        <a class="btn" href="#new-group">Create the first group</a>
+    </div>
+</div>
+<% } %>
+
+<div class="grid-2">
+    <% groups.forEach(function (group) { %>
+    <section class="group-card" style="--hue: var(--g-<%= group.color %>)">
+        <div class="head">
+            <span class="swatch" style="width:12px;height:12px"></span>
+            <div class="col" style="min-width:0">
+                <h3 class="truncate"><%= group.name %></h3>
+                <% if (group.description) { %><span class="t-xs dim truncate"><%= group.description %></span><% } %>
+            </div>
+
+            <div class="row tight" style="margin-left:auto">
+                <span class="badge plain"><%= group.projects.length %> projects</span>
+                <span class="badge plain"><%= group.containers.length %> containers</span>
+            </div>
+        </div>
+
+        <div class="group-members">
+            <% if (group.projects.length === 0 && group.containers.length === 0) { %>
+            <p class="t-sm muted" style="padding:6px 2px">
+                Nothing in this group yet. Assign a project from its settings, or a container
+                from its detail page.
+            </p>
+            <% } %>
+
+            <% group.projects.forEach(function (project) { %>
+            <div class="member">
+                <svg class="i sm" aria-hidden="true"><use href="#i-git"></use></svg>
+                <a href="/ui/projects/<%= encodeURIComponent(project.name) %>" class="truncate"><%= project.name %></a>
+                <span class="tail">
+                    <span class="badge mono plain"><%= project.branch %></span>
+                    <% if (!project.enabled) { %><span class="badge idle">paused</span><% } %>
+                </span>
+            </div>
+            <% }) %>
+
+            <% group.containers.forEach(function (container) { %>
+            <div class="member">
+                <svg class="i sm" aria-hidden="true"><use href="#i-box"></use></svg>
+                <a href="/ui/containers/<%= encodeURIComponent(container.name) %>" class="truncate"><%= container.name %></a>
+                <span class="tail">
+                    <span class="badge <%= container.running ? "ok" : "idle" %>"><%= container.state %></span>
+                </span>
+            </div>
+            <% }) %>
+        </div>
+
+        <div class="card-foot row between">
+            <div class="row tight">
+                <% if (group.projects.length > 0) { %>
+                <form method="post" action="/ui/groups/<%= group.id %>/deploy">
+                    <button class="btn ghost sm" type="submit"
+                            data-confirm="Deploy every enabled project in <%= group.name %>?">
+                        <svg class="i sm" aria-hidden="true"><use href="#i-zap"></use></svg>
+                        Deploy projects
+                    </button>
+                </form>
+                <% } %>
+
+                <% if (group.containers.length > 0 && canAct) { %>
+                <form method="post" action="/ui/groups/<%= group.id %>/containers">
+                    <input type="hidden" name="action" value="restart">
+                    <button class="btn ghost sm" type="submit"
+                            data-confirm="Restart all <%= group.containers.length %> containers in <%= group.name %>?">
+                        <svg class="i sm" aria-hidden="true"><use href="#i-rotate"></use></svg>
+                        Restart containers
+                    </button>
+                </form>
+                <% } %>
+
+                <a class="btn quiet sm" href="/ui/containers?by=group&amp;group=<%= group.id %>">
+                    <svg class="i sm" aria-hidden="true"><use href="#i-eye"></use></svg>
+                    View in fleet
+                </a>
+            </div>
+
+            <details class="disclosure" style="border:0;background:transparent">
+                <summary style="padding:0;font-size:var(--t-xs)">Edit</summary>
+                <div class="body" style="padding:12px 0 0">
+                    <form class="form-grid" method="post" action="/ui/groups/<%= group.id %>/update">
+                        <label class="field">
+                            Name
+                            <input type="text" name="name" value="<%= group.name %>" autocomplete="off">
+                        </label>
+                        <label class="field">
+                            Description
+                            <input type="text" name="description" value="<%= group.description || "" %>" autocomplete="off">
+                        </label>
+                        <div class="hue-picker">
+                            <% colors.forEach(function (color) { %>
+                            <input type="radio" id="c-<%= group.id %>-<%= color %>" name="color" value="<%= color %>"
+                                   <%= group.color === color ? "checked" : "" %>>
+                            <label for="c-<%= group.id %>-<%= color %>" style="--hue: var(--g-<%= color %>)"
+                                   title="<%= color %>"></label>
+                            <% }) %>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn sm" type="submit">Save</button>
+                        </div>
+                    </form>
+
+                    <form method="post" action="/ui/groups/<%= group.id %>/delete" style="margin-top:10px">
+                        <button class="btn danger sm" type="submit"
+                                data-confirm="Delete the group <%= group.name %>? Nothing inside it is deleted — members simply become ungrouped.">
+                            Delete group
+                        </button>
+                    </form>
+                </div>
+            </details>
+        </div>
+    </section>
+    <% }) %>
+</div>
+
+<div class="grid-2">
+    <div class="card" id="new-group">
+        <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg> New group</h2></div>
+        <div class="card-body">
+            <form class="form-grid" method="post" action="/ui/groups">
+                <label class="field">
+                    Name
+                    <input type="text" name="name" placeholder="Customer facing" autocomplete="off" required maxlength="48">
+                </label>
+
+                <label class="field">
+                    Description
+                    <input type="text" name="description" placeholder="What belongs in here" autocomplete="off">
+                </label>
+
+                <div class="col">
+                    <span class="t-sm muted">Colour</span>
+                    <div class="hue-picker">
+                        <% colors.forEach(function (color, index) { %>
+                        <input type="radio" id="new-<%= color %>" name="color" value="<%= color %>" <%= index === 0 ? "checked" : "" %>>
+                        <label for="new-<%= color %>" style="--hue: var(--g-<%= color %>)" title="<%= color %>"></label>
+                        <% }) %>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn" type="submit">Create group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2><svg class="i" aria-hidden="true"><use href="#i-list"></use></svg> Ungrouped</h2>
+            <span class="badge plain"><%= ungroupedProjects.length + ungrouped.length %></span>
+        </div>
+        <div class="card-body stack tight" style="max-height:420px;overflow:auto">
+            <% if (ungroupedProjects.length === 0 && ungrouped.length === 0) { %>
+            <p class="t-sm muted">Everything belongs to a group.</p>
+            <% } %>
+
+            <% ungroupedProjects.forEach(function (project) { %>
+            <div class="member">
+                <svg class="i sm" aria-hidden="true"><use href="#i-git"></use></svg>
+                <a href="/ui/projects/<%= encodeURIComponent(project.name) %>" class="truncate"><%= project.name %></a>
+                <span class="tail t-xs dim">project</span>
+            </div>
+            <% }) %>
+
+            <% ungrouped.slice(0, 40).forEach(function (container) { %>
+            <div class="member">
+                <svg class="i sm" aria-hidden="true"><use href="#i-box"></use></svg>
+                <a href="/ui/containers/<%= encodeURIComponent(container.name) %>" class="truncate"><%= container.name %></a>
+                <span class="tail t-xs dim"><%= container.stack || "container" %></span>
+            </div>
+            <% }) %>
+
+            <% if (ungrouped.length > 40) { %>
+            <p class="t-xs dim">…and <%= ungrouped.length - 40 %> more.</p>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<%- include("../partials/foot") %>

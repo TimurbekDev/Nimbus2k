@@ -1,0 +1,267 @@
+<%- include("../partials/head", { title: title, nav: nav }) %>
+
+<%
+  const back = "/ui/containers";
+  const qs = (patch) => {
+      const params = new URLSearchParams();
+      const merged = { by: options.groupBy, sort: options.sortBy, state: options.state, q: options.search, group: options.groupId, density: density, ...patch };
+      for (const [key, value] of Object.entries(merged)) {
+          if (value && value !== "all" && !(key === "density" && value === "cosy")) params.set(key, value);
+      }
+      const query = params.toString();
+      return query ? `/ui/containers?${query}` : "/ui/containers";
+  };
+%>
+
+<div class="page-head">
+    <div>
+        <h1>Fleet</h1>
+        <p class="lede">
+            Every container the docker daemon on this host knows about, grouped the way you
+            need to read it right now.
+        </p>
+    </div>
+
+    <div class="row tight">
+        <button class="btn ghost sm" type="button" id="buckets-expand">
+            <svg class="i sm" aria-hidden="true"><use href="#i-list"></use></svg>
+            Expand / collapse all
+        </button>
+        <div class="segmented">
+            <a href="<%= qs({ density: "cosy" }) %>" <%= density === "cosy" ? 'aria-current="true"' : "" %>>Cosy</a>
+            <a href="<%= qs({ density: "compact" }) %>" <%= density === "compact" ? 'aria-current="true"' : "" %>>Compact</a>
+        </div>
+    </div>
+</div>
+
+<div data-refresh="10" hidden></div>
+
+<% if (!view.ok) { %>
+<div class="card danger">
+    <div class="card-body">
+        <div class="banner bad">
+            <svg class="i" aria-hidden="true"><use href="#i-alert-circle"></use></svg>
+            <div>
+                <strong><%= app.name %> cannot talk to the docker daemon.</strong>
+                <div class="t-sm muted" style="margin-top:6px"><code><%= view.error %></code></div>
+                <div class="t-sm muted" style="margin-top:8px">
+                    The container needs <code>/var/run/docker.sock</code> mounted, and the
+                    <code>docker</code> CLI on its PATH. Deploys and the registry work without it;
+                    only this page needs it.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<% } else { %>
+
+<div class="grid-4">
+    <div class="tile info">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-box"></use></svg> Containers</span>
+        <span class="tile-value"><%= view.totals.total %></span>
+        <span class="tile-note"><%= view.buckets.length %> <%= view.axis.label.toLowerCase() %> buckets</span>
+    </div>
+
+    <div class="tile ok">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-play"></use></svg> Running</span>
+        <span class="tile-value"><%= view.totals.running %></span>
+        <span class="tile-note"><%= fmt.percent(view.totals.running, view.totals.total) %> of the fleet</span>
+    </div>
+
+    <div class="tile <%= view.totals.stopped > 0 ? "warn" : "" %>">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-square"></use></svg> Stopped</span>
+        <span class="tile-value"><%= view.totals.stopped %></span>
+        <span class="tile-note"><%= view.totals.paused %> paused</span>
+    </div>
+
+    <div class="tile <%= view.totals.unhealthy > 0 ? "bad" : "ok" %>">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-activity"></use></svg> Load</span>
+        <span class="tile-value"><%= view.totals.cpu.toFixed(0) %><small>% cpu</small></span>
+        <span class="tile-note">
+            <% if (view.totals.unhealthy > 0) { %>
+            <span class="badge bad"><%= view.totals.unhealthy %> unhealthy</span>
+            <% } else { %>
+            <%= view.totals.memory.toFixed(0) %>% memory · no health failures
+            <% } %>
+        </span>
+    </div>
+</div>
+
+<%# The whole view lives in the query string, so a filtered fleet is a link. %>
+<form class="fleet-toolbar" method="get" action="/ui/containers" data-autosubmit>
+    <input type="hidden" name="density" value="<%= density %>">
+
+    <div class="input-icon search">
+        <svg class="i" aria-hidden="true"><use href="#i-search"></use></svg>
+        <input type="search" name="q" value="<%= options.search %>" data-search
+               placeholder="Filter by name, image, stack, service…" autocomplete="off">
+    </div>
+
+    <span class="toolbar-label">Group by</span>
+    <div class="segmented">
+        <% Object.entries(axes).forEach(function (entry) { %>
+        <a href="<%= qs({ by: entry[0] }) %>" title="<%= entry[1].hint %>"
+           <%= options.groupBy === entry[0] ? 'aria-current="true"' : "" %>>
+            <svg class="i sm" aria-hidden="true"><use href="#i-<%= entry[1].icon %>"></use></svg>
+            <%= entry[1].label %>
+        </a>
+        <% }) %>
+    </div>
+
+    <label class="field" style="width:132px">
+        <select name="sort" aria-label="Sort containers">
+            <% sorts.forEach(function (key) { %>
+            <option value="<%= key %>" <%= options.sortBy === key ? "selected" : "" %>>
+                Sort: <%= key %>
+            </option>
+            <% }) %>
+        </select>
+    </label>
+
+    <label class="field" style="width:132px">
+        <select name="state" aria-label="Filter by state">
+            <option value="all" <%= options.state === "all" ? "selected" : "" %>>All states</option>
+            <option value="running" <%= options.state === "running" ? "selected" : "" %>>Running</option>
+            <option value="stopped" <%= options.state === "stopped" ? "selected" : "" %>>Stopped</option>
+            <option value="unhealthy" <%= options.state === "unhealthy" ? "selected" : "" %>>Unhealthy</option>
+        </select>
+    </label>
+
+    <% if (groups.length > 0) { %>
+    <label class="field" style="width:150px">
+        <select name="group" aria-label="Filter by group">
+            <option value="">Any group</option>
+            <% groups.forEach(function (group) { %>
+            <option value="<%= group.id %>" <%= options.groupId === group.id ? "selected" : "" %>><%= group.name %></option>
+            <% }) %>
+        </select>
+    </label>
+    <% } %>
+
+    <% if (options.search || options.state !== "all" || options.groupId) { %>
+    <a class="btn quiet sm" href="/ui/containers">
+        <svg class="i sm" aria-hidden="true"><use href="#i-x"></use></svg>
+        Clear
+    </a>
+    <span class="t-sm dim"><%= view.matched %> of <%= view.totals.total %></span>
+    <% } %>
+</form>
+
+<% if (view.buckets.length === 0) { %>
+<div class="card">
+    <div class="empty">
+        <svg class="i" aria-hidden="true"><use href="#i-search"></use></svg>
+        <h3>Nothing matches</h3>
+        <p>No container matches this filter. Clear it, or widen the state selector.</p>
+        <a class="btn ghost" href="/ui/containers">Reset the view</a>
+    </div>
+</div>
+<% } %>
+
+<div class="stack tight <%= density === "compact" ? "density-compact" : "" %>">
+    <% view.buckets.forEach(function (bucket) { %>
+    <section class="bucket" data-key="<%= options.groupBy %>:<%= bucket.key %>" data-open="1"
+             data-tone="<%= bucket.unhealthy ? "bad" : bucket.stopped ? "warn" : "" %>">
+        <header class="bucket-head">
+            <svg class="i caret" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+
+            <h3>
+                <% if (bucket.group) { %>
+                <span class="swatch g-<%= bucket.group.color %>" style="--hue: var(--g-<%= bucket.group.color %>)"></span>
+                <% } else { %>
+                <svg class="i" aria-hidden="true" style="color:var(--text-3)"><use href="#i-<%= view.axis.icon %>"></use></svg>
+                <% } %>
+                <span class="truncate"><%= bucket.title %></span>
+            </h3>
+
+            <% if (bucket.project) { %>
+            <a class="badge brand" href="/ui/projects/<%= encodeURIComponent(bucket.project) %>">
+                <svg class="i" aria-hidden="true"><use href="#i-git"></use></svg>
+                <%= bucket.project %>
+            </a>
+            <% } %>
+
+            <div class="bucket-stats">
+                <span class="badge <%= bucket.unhealthy ? "bad" : bucket.stopped ? "warn" : "ok" %>">
+                    <%= bucket.running %>/<%= bucket.total %> up
+                </span>
+                <% if (bucket.unhealthy > 0) { %>
+                <span class="badge bad"><%= bucket.unhealthy %> unhealthy</span>
+                <% } %>
+                <span class="badge plain mono"><%= bucket.cpu.toFixed(1) %>% cpu</span>
+
+                <% if (canAct && !bucket.loose) { %>
+                <div class="bucket-actions">
+                    <% const scope = bucket.stack
+                        ? { field: "stack", value: bucket.stack }
+                        : bucket.group
+                            ? { field: "group_id", value: bucket.group.id }
+                            : { field: "project", value: bucket.project }; %>
+
+                    <form method="post" action="/ui/containers/bulk">
+                        <input type="hidden" name="back" value="<%= back %>">
+                        <input type="hidden" name="<%= scope.field %>" value="<%= scope.value %>">
+                        <input type="hidden" name="action" value="restart">
+                        <button class="btn ghost sm" type="submit"
+                                data-confirm="Restart all <%= bucket.total %> containers in <%= bucket.title %>?">
+                            <svg class="i sm" aria-hidden="true"><use href="#i-rotate"></use></svg>
+                            Restart all
+                        </button>
+                    </form>
+
+                    <% if (bucket.stopped > 0) { %>
+                    <form method="post" action="/ui/containers/bulk">
+                        <input type="hidden" name="back" value="<%= back %>">
+                        <input type="hidden" name="<%= scope.field %>" value="<%= scope.value %>">
+                        <input type="hidden" name="state" value="stopped">
+                        <input type="hidden" name="action" value="start">
+                        <button class="btn ghost sm" type="submit">
+                            <svg class="i sm" aria-hidden="true"><use href="#i-play"></use></svg>
+                            Start stopped
+                        </button>
+                    </form>
+                    <% } else { %>
+                    <form method="post" action="/ui/containers/bulk">
+                        <input type="hidden" name="back" value="<%= back %>">
+                        <input type="hidden" name="<%= scope.field %>" value="<%= scope.value %>">
+                        <input type="hidden" name="action" value="stop">
+                        <button class="btn danger sm" type="submit"
+                                data-confirm="Stop all <%= bucket.running %> running containers in <%= bucket.title %>?">
+                            <svg class="i sm" aria-hidden="true"><use href="#i-square"></use></svg>
+                            Stop all
+                        </button>
+                    </form>
+                    <% } %>
+                </div>
+                <% } %>
+            </div>
+        </header>
+
+        <div class="bucket-body">
+            <div class="crow head">
+                <span></span>
+                <span>Container</span>
+                <span>Image</span>
+                <span class="col-cpu">CPU</span>
+                <span class="col-mem">Memory</span>
+                <span class="col-ports">Ports</span>
+                <span></span>
+            </div>
+
+            <% bucket.containers.forEach(function (container) { %>
+            <%- include("../partials/container-row", { container: container, back: back }) %>
+            <% }) %>
+        </div>
+    </section>
+    <% }) %>
+</div>
+
+<% if (!canAct) { %>
+<p class="t-sm dim center">
+    Container actions are disabled. Set <code>CONTAINER_ACTIONS=true</code> to start, stop and restart from here.
+</p>
+<% } %>
+
+<% } %>
+
+<%- include("../partials/foot") %>

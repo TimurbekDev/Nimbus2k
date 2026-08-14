@@ -1,0 +1,240 @@
+/*
+ * Design tokens.
+ *
+ * Dark is the default because this is an operations console that lives on a
+ * second monitor, but every colour is defined twice so the light theme is a
+ * first-class choice rather than an inversion. Components never reach for a raw
+ * colour: they use the semantic tokens below, which is what keeps the two
+ * themes from drifting apart.
+ */
+
+:root {
+    color-scheme: dark;
+
+    /* ---------------------------------------------------------- surfaces */
+    --bg: #090b0f;
+    --bg-grid: rgba(255, 255, 255, 0.022);
+    --surface: #10131a;
+    --surface-2: #161a23;
+    --surface-3: #1d222d;
+    --surface-hover: rgba(255, 255, 255, 0.035);
+    --surface-active: rgba(255, 255, 255, 0.06);
+    --overlay: rgba(5, 7, 10, 0.72);
+
+    /* ---------------------------------------------------------- lines */
+    --line: #222836;
+    --line-strong: #2e3545;
+    --line-soft: rgba(255, 255, 255, 0.05);
+
+    /* ---------------------------------------------------------- text */
+    --text: #e9edf5;
+    --text-2: #9aa4b8;
+    --text-3: #6a7386;
+    --text-inverse: #080a0e;
+
+    /* ---------------------------------------------------------- brand */
+    --brand: #5b8dff;
+    --brand-2: #8b6dff;
+    --brand-soft: rgba(91, 141, 255, 0.14);
+    --brand-line: rgba(91, 141, 255, 0.42);
+    --brand-text: #a8c2ff;
+
+    /* ---------------------------------------------------------- status */
+    --ok: #34d399;
+    --ok-soft: rgba(52, 211, 153, 0.13);
+    --ok-line: rgba(52, 211, 153, 0.4);
+
+    --warn: #fbbf24;
+    --warn-soft: rgba(251, 191, 36, 0.13);
+    --warn-line: rgba(251, 191, 36, 0.4);
+
+    --bad: #f87171;
+    --bad-soft: rgba(248, 113, 113, 0.13);
+    --bad-line: rgba(248, 113, 113, 0.42);
+
+    --info: #60a5fa;
+    --info-soft: rgba(96, 165, 250, 0.13);
+    --info-line: rgba(96, 165, 250, 0.4);
+
+    --idle: #7b8496;
+    --idle-soft: rgba(123, 132, 150, 0.13);
+    --idle-line: rgba(123, 132, 150, 0.34);
+
+    /* ---------------------------------------------------------- group hues
+     * A closed set, chosen so eight groups side by side stay distinguishable
+     * at badge size and in both themes.
+     */
+    --g-slate: #94a3b8;
+    --g-blue: #60a5fa;
+    --g-violet: #a78bfa;
+    --g-emerald: #34d399;
+    --g-amber: #fbbf24;
+    --g-rose: #fb7185;
+    --g-cyan: #22d3ee;
+    --g-lime: #a3e635;
+
+    /* ---------------------------------------------------------- shape */
+    --r-xs: 5px;
+    --r-sm: 7px;
+    --r-md: 10px;
+    --r-lg: 14px;
+    --r-xl: 20px;
+    --r-full: 999px;
+
+    /* ---------------------------------------------------------- depth */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.5);
+    --ring: 0 0 0 3px var(--brand-soft);
+
+    /* ---------------------------------------------------------- metrics */
+    --sidebar-w: 232px;
+    --sidebar-w-collapsed: 64px;
+    --topbar-h: 56px;
+    --page-max: 1440px;
+
+    /* ---------------------------------------------------------- type */
+    --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+    --t-xs: 11px;
+    --t-sm: 12px;
+    --t-md: 13px;
+    --t-base: 14px;
+    --t-lg: 16px;
+    --t-xl: 20px;
+    --t-2xl: 26px;
+    --t-3xl: 34px;
+
+    /* ---------------------------------------------------------- motion */
+    --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --fast: 120ms var(--ease);
+    --base: 200ms var(--ease);
+    --slow: 340ms var(--ease);
+}
+
+[data-theme="light"] {
+    color-scheme: light;
+
+    --bg: #f5f6f9;
+    --bg-grid: rgba(15, 23, 42, 0.025);
+    --surface: #ffffff;
+    --surface-2: #f7f8fb;
+    --surface-3: #eef1f6;
+    --surface-hover: rgba(15, 23, 42, 0.032);
+    --surface-active: rgba(15, 23, 42, 0.055);
+    --overlay: rgba(15, 23, 42, 0.34);
+
+    --line: #e2e6ee;
+    --line-strong: #cbd3e0;
+    --line-soft: rgba(15, 23, 42, 0.07);
+
+    --text: #101725;
+    --text-2: #515b6d;
+    --text-3: #79839a;
+    --text-inverse: #ffffff;
+
+    --brand: #3b6ef5;
+    --brand-2: #7857f0;
+    --brand-soft: rgba(59, 110, 245, 0.1);
+    --brand-line: rgba(59, 110, 245, 0.34);
+    --brand-text: #2b56cc;
+
+    --ok: #0f9d6e;
+    --ok-soft: rgba(15, 157, 110, 0.1);
+    --ok-line: rgba(15, 157, 110, 0.32);
+
+    --warn: #b7791f;
+    --warn-soft: rgba(183, 121, 31, 0.1);
+    --warn-line: rgba(183, 121, 31, 0.32);
+
+    --bad: #d64545;
+    --bad-soft: rgba(214, 69, 69, 0.09);
+    --bad-line: rgba(214, 69, 69, 0.32);
+
+    --info: #2b6cb0;
+    --info-soft: rgba(43, 108, 176, 0.1);
+    --info-line: rgba(43, 108, 176, 0.3);
+
+    --idle: #64748b;
+    --idle-soft: rgba(100, 116, 139, 0.1);
+    --idle-line: rgba(100, 116, 139, 0.28);
+
+    --g-slate: #64748b;
+    --g-blue: #2563eb;
+    --g-violet: #7c3aed;
+    --g-emerald: #059669;
+    --g-amber: #b45309;
+    --g-rose: #e11d48;
+    --g-cyan: #0891b2;
+    --g-lime: #4d7c0f;
+
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.14);
+}
+
+/* An operator who never opens the theme menu should still get the theme their
+ * system asked for. The attribute above always wins once they choose. */
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        color-scheme: light;
+
+        --bg: #f5f6f9;
+        --bg-grid: rgba(15, 23, 42, 0.025);
+        --surface: #ffffff;
+        --surface-2: #f7f8fb;
+        --surface-3: #eef1f6;
+        --surface-hover: rgba(15, 23, 42, 0.032);
+        --surface-active: rgba(15, 23, 42, 0.055);
+        --overlay: rgba(15, 23, 42, 0.34);
+
+        --line: #e2e6ee;
+        --line-strong: #cbd3e0;
+        --line-soft: rgba(15, 23, 42, 0.07);
+
+        --text: #101725;
+        --text-2: #515b6d;
+        --text-3: #79839a;
+        --text-inverse: #ffffff;
+
+        --brand: #3b6ef5;
+        --brand-2: #7857f0;
+        --brand-soft: rgba(59, 110, 245, 0.1);
+        --brand-line: rgba(59, 110, 245, 0.34);
+        --brand-text: #2b56cc;
+
+        --ok: #0f9d6e;
+        --ok-soft: rgba(15, 157, 110, 0.1);
+        --ok-line: rgba(15, 157, 110, 0.32);
+
+        --warn: #b7791f;
+        --warn-soft: rgba(183, 121, 31, 0.1);
+        --warn-line: rgba(183, 121, 31, 0.32);
+
+        --bad: #d64545;
+        --bad-soft: rgba(214, 69, 69, 0.09);
+        --bad-line: rgba(214, 69, 69, 0.32);
+
+        --info: #2b6cb0;
+        --info-soft: rgba(43, 108, 176, 0.1);
+        --info-line: rgba(43, 108, 176, 0.3);
+
+        --idle: #64748b;
+        --idle-soft: rgba(100, 116, 139, 0.1);
+        --idle-line: rgba(100, 116, 139, 0.28);
+
+        --g-slate: #64748b;
+        --g-blue: #2563eb;
+        --g-violet: #7c3aed;
+        --g-emerald: #059669;
+        --g-amber: #b45309;
+        --g-rose: #e11d48;
+        --g-cyan: #0891b2;
+        --g-lime: #4d7c0f;
+
+        --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+        --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+        --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.14);
+    }
+}

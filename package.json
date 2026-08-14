@@ -1,26 +1,34 @@
 {
-  "name": "deploy-server",
-  "version": "1.0.0",
-  "description": "GitHub webhook listener that redeploys docker compose projects on push",
-  "main": "server.js",
+  "name": "nimbus2k",
+  "version": "2.0.0",
+  "description": "Nimbus2k - a self-hosted deployment and container control plane for docker compose fleets",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node --no-warnings=ExperimentalWarning server.js"
+    "start": "node --no-warnings=ExperimentalWarning src/index.js",
+    "dev": "node --no-warnings=ExperimentalWarning --watch src/index.js",
+    "hash-password": "node src/tools/hash-password.js"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TimurbekDev/deploy-server.git"
+    "url": "git+https://github.com/TimurbekDev/nimbus2k.git"
   },
-  "keywords": [],
+  "keywords": [
+    "deploy",
+    "docker",
+    "compose",
+    "webhook",
+    "control-plane"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/TimurbekDev/deploy-server/issues"
+    "url": "https://github.com/TimurbekDev/nimbus2k/issues"
   },
-  "homepage": "https://github.com/TimurbekDev/deploy-server#readme",
+  "homepage": "https://github.com/TimurbekDev/nimbus2k#readme",
   "dependencies": {
     "ejs": "^6.0.1",
     "express": "^5.2.1"

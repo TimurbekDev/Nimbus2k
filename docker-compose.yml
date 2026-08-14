@@ -1,7 +1,8 @@
 services:
-  deploy-server:
+  nimbus2k:
     build: .
-    container_name: deploy-server
+    image: nimbus2k:latest
+    container_name: nimbus2k
     restart: unless-stopped
 
     # Published on loopback only. Terminate TLS in a reverse proxy and forward
@@ -18,12 +19,12 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       PROJECTS_DIR: /srv/projects
-      DB_PATH: /data/deploy-server.db
+      DB_PATH: /data/nimbus2k.db
 
     volumes:
       # Lets the container drive the host docker daemon. Equivalent to root on
-      # the host, which is why the port stays on loopback and the webhook is
-      # HMAC verified.
+      # the host, which is why the port stays on loopback, the webhook is HMAC
+      # verified and the UI sits behind a password.
       - /var/run/docker.sock:/var/run/docker.sock
 
       # Must be the SAME path on both sides. `docker compose up` inside this
@@ -31,11 +32,11 @@ services:
       # project's compose file resolve against the host filesystem.
       - /srv/projects:/srv/projects
 
-      # Registry and deploy history survive rebuilds.
-      - deploy-data:/data
+      # Registry, deploy history, groups and the audit log survive rebuilds.
+      - nimbus2k-data:/data
 
-      # Deploy keys for private repositories. Drop this line when the
-      # checkouts pull over https with a token.
+      # Deploy keys for private repositories. Drop this line when the checkouts
+      # pull over https with a token.
       - ${SSH_DIR:-/root/.ssh}:/root/.ssh:ro
 
     healthcheck:
@@ -52,4 +53,4 @@ services:
         max-file: "3"
 
 volumes:
-  deploy-data:
+  nimbus2k-data:

@@ -1,0 +1,40 @@
+<header class="topbar">
+    <button class="btn quiet icon sidebar-toggle mobile-only" type="button" id="sidebar-open" aria-label="Open navigation">
+        <svg class="i lg" aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+
+    <div class="topbar-title">
+        <% if (crumbs && crumbs.length) { %>
+        <nav class="crumbs" aria-label="Breadcrumb">
+            <% crumbs.forEach(function (crumb, index) { %>
+            <% if (index > 0) { %><span class="sep">/</span><% } %>
+            <% if (crumb.href) { %><a href="<%= crumb.href %>"><%= crumb.label %></a>
+            <% } else { %><span class="truncate"><%= crumb.label %></span><% } %>
+            <% }) %>
+        </nav>
+        <% } else { %>
+        <h1><%= title %></h1>
+        <% } %>
+    </div>
+
+    <div class="topbar-actions">
+        <button class="palette-trigger" type="button" id="palette-trigger">
+            <svg class="i" aria-hidden="true"><use href="#i-search"></use></svg>
+            <span>Search or jump to…</span>
+            <kbd>Ctrl K</kbd>
+        </button>
+
+        <%# Filled in by the client once the event stream connects. %>
+        <span class="live-dot" id="live-dot" data-state="connecting" title="Live updates: connecting"></span>
+
+        <button class="btn quiet icon" type="button" id="theme-toggle" title="Switch theme" aria-label="Switch theme">
+            <svg class="i lg" aria-hidden="true"><use href="#i-sun"></use></svg>
+        </button>
+
+        <form method="post" action="/ui/logout">
+            <button class="btn quiet icon" type="submit" title="Sign out" aria-label="Sign out">
+                <svg class="i lg" aria-hidden="true"><use href="#i-logout"></use></svg>
+            </button>
+        </form>
+    </div>
+</header>

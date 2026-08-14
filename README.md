@@ -1,212 +1,403 @@
-# deploy-server
+# Nimbus2k
 
-GitHub push webhook listener. On a verified push it fast-forwards the checkout
-under `PROJECTS_DIR` and rebuilds it with `docker compose up -d --build`.
+A self-hosted deployment and container control plane for a single docker host.
 
-Registered repositories, their per-repo settings and the deploy history live in
-a SQLite file (`node:sqlite`, no native dependency).
+Nimbus2k does two jobs, and the whole point is that it does them in one place:
 
-## Requirements
+- **Deploys.** A GitHub push lands on `/webhook`, Nimbus2k verifies the
+  signature, fast-forwards the checkout and runs `docker compose up -d --build`.
+  Every run is recorded with its full log.
+- **Fleet.** Every container the docker daemon knows about, grouped by compose
+  stack, by your own grouping, by the project that deploys it, by state or by
+  image — with live CPU and memory, streamed logs, and start/stop/restart.
 
-Node >= 22.5 (`node:sqlite`), git and docker compose on the host.
+Server-rendered EJS, two runtime dependencies (`express`, `ejs`), SQLite through
+`node:sqlite`. No build step, no bundler, no client framework.
 
-## Layout
+---
 
+## Contents
+
+- [Quick start](#quick-start)
+- [Signing in](#signing-in)
+- [How a deploy works](#how-a-deploy-works)
+- [The fleet view](#the-fleet-view)
+- [Groups](#groups)
+- [Configuration](#configuration)
+- [HTTP API](#http-api)
+- [Running behind a reverse proxy](#running-behind-a-reverse-proxy)
+- [Project layout](#project-layout)
+- [Upgrading from deploy-server 1.x](#upgrading-from-deploy-server-1x)
+- [Security notes](#security-notes)
+
+---
+
+## Quick start
+
+```bash
+git clone https://github.com/TimurbekDev/nimbus2k.git /srv/projects/nimbus2k
+cd /srv/projects/nimbus2k
+
+cp .env.example .env
 ```
-server.js            binds the port; everything else is wiring
-src/
-  app.js             express setup and route mounting
-  config.js          environment, validated once at boot
-  db.js              sqlite schema and every query
-  deployer.js        the deploy loop, its event bus and cancellation
-  auth.js            token compare, UI sessions, login throttle
-  format.js          time and duration helpers shared by the views
-  validate.js        the name patterns that guard filesystem paths
-  routes/
-    webhook.js       POST /webhook, HMAC verified
-    api.js           the token-authenticated JSON API
-    ui.js            the dashboard, its forms and the event stream
-views/               EJS templates
-public/              stylesheet and the client script
-nginx/               vhost templates for the host nginx
-scripts/             one-shot server setup
+
+Fill in `.env`. Three values are required and Nimbus2k will not start without
+them:
+
+```ini
+GITHUB_WEBHOOK_SECRET=...        # the same secret you give GitHub
+ADMIN_USER=admin
+ADMIN_PASSWORD=...               # at least 12 characters
 ```
 
-## Setup
+Then:
 
-```sh
-npm install
-cp .env.example .env      # fill in GITHUB_WEBHOOK_SECRET and ADMIN_TOKEN
-npm start
-```
-
-Point the GitHub webhook at `POST /webhook`, content type `application/json`,
-using the same secret as `GITHUB_WEBHOOK_SECRET`.
-
-Bind stays on `127.0.0.1` by default. Put a TLS reverse proxy in front rather
-than exposing the port.
-
-## Running in docker
-
-```sh
-cp .env.example .env      # GITHUB_WEBHOOK_SECRET and ADMIN_TOKEN only
+```bash
 docker compose up -d --build
 ```
 
-The image carries the `git` and `docker compose` CLIs; the daemon comes from
-the mounted host socket. `HOST`, `PORT`, `PROJECTS_DIR` and `DB_PATH` are
-pinned in `docker-compose.yml` and ignored from `.env`, because only those
-values work inside the container.
+Point a GitHub webhook at `https://your-host/webhook`:
 
-Three details decide whether this works:
+| Setting      | Value                       |
+| ------------ | --------------------------- |
+| Payload URL  | `https://your-host/webhook` |
+| Content type | `application/json`          |
+| Secret       | `GITHUB_WEBHOOK_SECRET`     |
+| Events       | Just the push event         |
 
-- **`/srv/projects` mounts at the identical path on both sides.** A nested
-  `docker compose up` is executed by the host daemon, so a project's relative
-  bind mounts resolve against the host filesystem. A different container path
-  silently mounts the wrong directories.
-- **The docker socket grants root on the host.** That is why the port publishes
-  to `127.0.0.1` and every webhook is HMAC verified.
-- **Private repositories need their deploy key inside the container.** Point
-  `SSH_DIR` at the key directory, or switch the checkouts to https with a
-  token and drop that volume.
+Open `https://your-host/ui` and sign in.
 
-The SQLite file lives on the `deploy-data` volume, so the registry and history
-survive `up --build`. It needs no container of its own: it is a file, not a
-server.
+Running without docker, for development:
 
-Deploying `deploy-server` through itself restarts its own container mid-run and
-the deploy never reports back. Keep using the SSH workflow in
-`.github/workflows/deploy.yml` for this repository, or disable it with
-`PATCH /repos/deploy-server {"enabled": false}`.
-
-## Web UI
-
-`/ui` serves an EJS dashboard: success rate and average duration, what is
-deploying right now, every registered repository with the outcome of its last
-run, and the log of any single deploy. Each repository has a page for manual
-deploys, cancellation and its registry fields. `/` redirects there.
-
-| | |
-|---|---|
-| live updates | `GET /ui/events` is a server-sent event stream. Log lines appear as they are written, and a run starting or ending refreshes the open page. No polling, no manual reload. |
-| cancel | Stops the running step and records the deploy as `cancelled`. |
-| redeploy | Runs the same branch again from any row in the history. |
-| filter | Type in the repository filter, or press `/` from anywhere on the dashboard. |
-| raw log | `GET /ui/deployments/:id/raw` is the plain text, for piping into anything else. |
-| register by hand | For a checkout outside `PROJECTS_DIR`, or when `AUTO_REGISTER` is off. |
-
-A browser cannot attach an `Authorization` header to a navigation, so the login
-form trades `ADMIN_TOKEN` for a random session id held in memory and returned
-in an `HttpOnly`, `SameSite=Strict` cookie. Sessions last 12 hours and a
-restart clears them. Login is throttled to 10 attempts per client address per
-15 minutes, and state-changing posts also check the `Origin` header.
-
-The log of a running deploy lives in the deployer's buffer and reaches the
-database only when the run ends, so a tab opened halfway through is served the
-buffer and then follows the stream.
-
-Cancelling kills the step's whole process group. `git` shells out to `ssh` and
-`docker compose` to buildkit; killing only the direct child leaves the
-grandchild holding the pipes open, and the step hangs instead of stopping.
-
-The client script has no build step and no dependencies. Without JavaScript
-every page still renders and every form still works — only the live updates are
-lost.
-
-## TLS through the host nginx
-
-TLS terminates in the nginx already running on the host, which proxies to the
-container on `127.0.0.1:$PORT`. Nothing in `docker-compose.yml` binds 80 or
-443, so the other sites that nginx serves are untouched.
-
-On the server:
-
-1. Point an A record for `DOMAIN` at the server and open ports 80 and 443.
-2. Set `DOMAIN` and `LETSENCRYPT_EMAIL` in `.env`.
-3. Run the setup once:
-
-```sh
-sudo ./scripts/setup-nginx-tls.sh
+```bash
+npm install
+GITHUB_WEBHOOK_SECRET=dev ADMIN_USER=admin ADMIN_PASSWORD=dev-password-1234 npm run dev
 ```
 
-It installs a challenge-only vhost, requests the certificate over HTTP-01,
-then swaps in the TLS vhost — nginx refuses to start while `ssl_certificate`
-points at a file that does not exist yet, which is why it takes two passes.
-Set `CERTBOT_STAGING=1` for a dry run against the staging CA first: five failed
-production attempts per hour lock the domain out for the rest of that hour.
+---
 
-Renewals come from the host's own `certbot.timer`. The script drops
-`/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` so a renewed
-certificate is reloaded without manual work.
+## Signing in
 
-The vhost source is `nginx/deploy-server.conf.template`, with `__DOMAIN__` and
-`__PORT__` substituted at install time. It is **copied** into `/etc/nginx`,
-never symlinked: the deploy workflow runs `git checkout -- .`, which would
-revert anything written back into the checkout. Editing the template therefore
-means rerunning the script.
+The UI takes a username and a password. The API takes either the same pair over
+HTTP Basic, or a bearer token when `ADMIN_TOKEN` is set.
 
-The vhost gives `/ui/events` its own `location` with `proxy_buffering off` and
-a one-hour read timeout. Without it nginx would hold every log line until the
-deploy ended and then drop the stream after a minute of quiet.
+**Store the password as a digest** rather than in the clear — a leaked `.env`
+then costs you one system rather than every system where that password was
+reused:
 
-Point the GitHub webhook at `https://$DOMAIN/webhook`.
-
-## Repository registry
-
-A push from an unregistered repository registers itself when
-`PROJECTS_DIR/<name>/.git` exists, taking the pushed branch as its deploy
-branch. Set `AUTO_REGISTER=false` to require `POST /repos` instead.
-
-| Field | Default | Meaning |
-|---|---|---|
-| `name` | - | GitHub repository name |
-| `branch` | `master` | only pushes to this branch deploy |
-| `path` | `PROJECTS_DIR/<name>` | checkout on the server |
-| `compose_file` | `null` | passed as `docker compose -f <file>` |
-| `enabled` | `true` | `false` ignores pushes without deleting history |
-| `prune_images` | `true` | run `docker image prune -f` after the build |
-| `clean_untracked` | `false` | run `git clean -fd`; deletes untracked files, including a repo-local `.env` |
-
-## Deploy steps
-
-```
-git fetch --prune origin
-git reset --hard origin/<branch>
-git clean -fd                      # only when clean_untracked
-docker compose [-f <file>] up -d --build
-docker image prune -f              # only when prune_images
+```bash
+npm run hash-password
+# Password: ····························
+#
+# Add this to .env, and remove ADMIN_PASSWORD:
+#
+# ADMIN_PASSWORD_HASH=scrypt$16384$8$1$…
 ```
 
-Commands run through `spawn` with an argument array, never a shell, so no
-payload value can be interpreted as a command. One deploy runs per repository
-at a time; pushes arriving mid-deploy collapse into a single follow-up run.
+Put the line in `.env`, delete `ADMIN_PASSWORD`, restart. When both are present
+the hash wins.
 
-## API
+Sessions live in memory in an `HttpOnly`, `SameSite=Strict` cookie scoped to
+`/ui`, and last `SESSION_TTL_MS` (12 hours by default). A restart signs everyone
+out. Sign-in is rate-limited per client address — ten attempts, then a
+fifteen-minute lockout — and every attempt, successful or not, lands in the
+audit log.
 
-`GET /healthz` and `POST /webhook` are public; `/ui` uses the cookie session
-described above. Everything else needs `Authorization: Bearer $ADMIN_TOKEN`,
-and returns 503 until `ADMIN_TOKEN` is set.
+---
 
-| Route | Purpose |
-|---|---|
-| `GET /healthz` | liveness |
-| `GET /ui` | dashboard, cookie session |
-| `GET /ui/events` | server-sent deploy events, cookie session |
-| `POST /webhook` | GitHub push handler, HMAC verified |
-| `GET /status` | in-flight deploys plus the 10 most recent |
-| `GET /repos` | list registered repositories |
-| `POST /repos` | register one: `{ name, branch?, path?, compose_file? }` |
-| `PATCH /repos/:name` | update any registry field |
-| `DELETE /repos/:name` | unregister, dropping its history |
-| `POST /repos/:name/deploy` | trigger manually: `{ branch? }` |
-| `POST /repos/:name/cancel` | kill the running deploy, 409 when nothing runs |
-| `GET /deployments?repo=&limit=` | history without logs |
-| `GET /deployments/:id` | one deploy including its captured log |
+## How a deploy works
 
-```sh
-curl -H "Authorization: Bearer $ADMIN_TOKEN" localhost:3000/deployments?repo=my-app
-curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" localhost:3000/repos/my-app/deploy
+1. GitHub posts to `/webhook`. The HMAC in `X-Hub-Signature-256` is checked
+   against the raw request body; anything else is rejected with 401.
+2. The repository name is matched against the registry. If it is unknown and
+   `AUTO_REGISTER` is on, a project is created automatically as long as
+   `PROJECTS_DIR/<name>/.git` already exists.
+3. Pushes to any branch other than the project's branch are recorded and
+   ignored — the delivery log on the project page explains exactly why nothing
+   happened.
+4. The run executes, in the checkout, in order:
+
+   ```
+   git fetch --prune origin
+   git reset --hard origin/<branch>
+   git clean -fd                      # only when "clean untracked" is on
+   docker compose up -d --build --remove-orphans
+   docker image prune -f              # only when "prune images" is on
+   ```
+
+Each line of output is streamed to every open browser tab over server-sent
+events and stored with the run when it ends.
+
+One deploy per project at a time. Pushes arriving mid-deploy collapse into a
+single follow-up run, so three commits landing during a build produce one more
+deploy rather than three. A step that runs longer than `STEP_TIMEOUT_MS` is
+killed, and so is its whole process group — git shells out to ssh and compose to
+buildkit, and killing only the direct child would leave the run hanging.
+
+---
+
+## The fleet view
+
+`/ui/containers` reads the docker daemon directly. Nothing about a container is
+cached in the database; the only thing Nimbus2k stores is your annotation of it
+(group, pin, note), keyed by name so it survives the container being recreated.
+
+Group the fleet by:
+
+| Axis              | Answers                                       |
+| ----------------- | --------------------------------------------- |
+| **Compose stack** | what docker itself thinks belongs together    |
+| **Group**         | your own grouping, which can span stacks      |
+| **Project**       | which repository deploys this container       |
+| **State**         | what is running, stopped, paused or unhealthy |
+| **Image**         | every replica of the same image               |
+| **Flat list**     | no grouping                                   |
+
+Sort by state (anything unhealthy first), name, CPU, memory or age; filter by
+free text, by state, or by group. The whole view lives in the query string, so a
+filtered fleet is a link you can paste into a ticket.
+
+Per container: start, stop, restart, pause, resume, live log follow, ports,
+mounts, networks, health-check history and environment — with anything that
+looks like a credential masked until you click *reveal*.
+
+Per bucket: restart everything in it, stop everything running, or start
+everything stopped. Membership is resolved server-side from the bucket identity,
+so a form never posts a container list a client could have rewritten.
+
+Container actions are behind `CONTAINER_ACTIONS` (on by default); `kill`,
+`remove` and pruning are behind `CONTAINER_DESTRUCTIVE_ACTIONS` (off by
+default).
+
+If the docker socket is not mounted, the fleet view explains itself and the rest
+of Nimbus2k keeps working.
+
+---
+
+## Groups
+
+A compose stack is one file. A group is whatever you say it is: "customer
+facing", "everything the billing team owns", "restart these together after a
+database upgrade". A group holds **projects and containers at the same time**,
+and can be acted on as a unit — deploy every project in it, restart every
+container in it.
+
+Deleting a group never deletes anything inside it; members simply become
+ungrouped.
+
+---
+
+## Configuration
+
+Every setting is read from the environment at boot. `.env.example` documents all
+of them; the ones worth knowing:
+
+| Variable                        | Default              | Meaning                                                        |
+| ------------------------------- | -------------------- | -------------------------------------------------------------- |
+| `GITHUB_WEBHOOK_SECRET`         | —                    | **Required.** HMAC secret for every delivery.                  |
+| `ADMIN_USER`                    | `admin`              | **Required.** The operator who signs in.                       |
+| `ADMIN_PASSWORD`                | —                    | **Required** unless a hash is set. At least 12 characters.     |
+| `ADMIN_PASSWORD_HASH`           | —                    | scrypt digest from `npm run hash-password`. Wins over the above. |
+| `ADMIN_TOKEN`                   | —                    | Optional bearer token for the API. At least 16 characters.     |
+| `SESSION_TTL_MS`                | `43200000`           | How long a browser session lasts.                              |
+| `PROJECTS_DIR`                  | `/srv/projects`      | Where checkouts live.                                          |
+| `DB_PATH`                       | `./data/nimbus2k.db` | Registry, history, groups, audit log.                          |
+| `AUTO_REGISTER`                 | `true`               | An unknown repo with a checkout registers itself.              |
+| `STEP_TIMEOUT_MS`               | `900000`             | A deploy step running longer than this is killed.              |
+| `DEPLOYMENT_HISTORY`            | `50`                 | Runs kept per project.                                         |
+| `LOG_TAIL_BYTES`                | `65536`              | Log kept per run.                                              |
+| `CONTAINER_ACTIONS`             | `true`               | Start / stop / restart / pause from the UI.                    |
+| `CONTAINER_DESTRUCTIVE_ACTIONS` | `false`              | `kill`, `remove` and pruning.                                  |
+| `APP_NAME` / `APP_TAGLINE`      | `Nimbus2k` / …       | Branding in the sidebar, title and login card.                 |
+| `LOG_LEVEL`                     | `info`               | `debug` \| `info` \| `warn` \| `error`.                        |
+
+Nimbus2k prints what is wrong and exits when a required value is missing, rather
+than starting with a default credential.
+
+---
+
+## HTTP API
+
+Everything the UI does is available over HTTP. Authenticate with the username
+and password:
+
+```bash
+curl -u "admin:$ADMIN_PASSWORD" http://127.0.0.1:3000/api/v1/status
 ```
 
-Each deploy keeps the last `LOG_TAIL_BYTES` of output; each repository keeps
-its last `DEPLOYMENT_HISTORY` deploys.
+or, when `ADMIN_TOKEN` is set, with a bearer header:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" http://127.0.0.1:3000/api/v1/status
+```
+
+`GET /api/v1` lists every endpoint. The shape of it:
+
+```
+GET    /api/v1/status                    scheduler and deploy stats
+GET    /api/v1/system                    docker health, daemon info, disk usage
+
+GET    /api/v1/projects                  registry, each with its last run
+POST   /api/v1/projects                  register one
+GET    /api/v1/projects/:name
+PATCH  /api/v1/projects/:name
+DELETE /api/v1/projects/:name
+POST   /api/v1/projects/:name/deploy     { branch? } -> 202
+POST   /api/v1/projects/:name/cancel
+
+GET    /api/v1/deployments               ?project= &status= &limit= &offset=
+GET    /api/v1/deployments/:id
+GET    /api/v1/deployments/:id/log       text/plain
+
+GET    /api/v1/containers                ?by= &sort= &state= &q= &fresh=1
+GET    /api/v1/containers/:ref           includes the full inspect
+GET    /api/v1/containers/:ref/logs      text/plain
+PATCH  /api/v1/containers/:ref           { group_id, pinned, note }
+POST   /api/v1/containers/:ref/:action   start|stop|restart|pause|unpause|kill|remove
+
+GET    /api/v1/groups
+POST   /api/v1/groups
+GET    /api/v1/groups/:id
+PATCH  /api/v1/groups/:id
+DELETE /api/v1/groups/:id
+```
+
+`GET /healthz` is the only unauthenticated route, so a load balancer can ask.
+
+---
+
+## Running behind a reverse proxy
+
+Nimbus2k binds to loopback and expects TLS to terminate in front of it. Any
+proxy will do; two things it has to get right:
+
+- **Forward the real client address and scheme.** `TRUST_PROXY` tells Nimbus2k
+  how many hops to trust, so `X-Forwarded-For` and `X-Forwarded-Proto` decide
+  the rate-limit key and whether the session cookie is marked `Secure`.
+- **Do not buffer the event streams.** `/ui/events` and
+  `/ui/containers/<name>/stream` are server-sent events; a buffering proxy holds
+  every log line back until the response ends, and a short read timeout drops a
+  connection that is deliberately long-lived.
+
+nginx:
+
+```nginx
+location ~ ^/ui/(events|containers/[^/]+/stream)$ {
+    proxy_pass http://127.0.0.1:7777;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+}
+
+location / {
+    proxy_pass http://127.0.0.1:7777;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 2m;
+}
+```
+
+Caddy needs no configuration for either — it forwards the headers and does not
+buffer:
+
+```caddyfile
+nimbus2k.example.com {
+    reverse_proxy 127.0.0.1:7777
+}
+```
+
+---
+
+## Project layout
+
+```
+src/
+  index.js              bootstrap: listen, graceful shutdown
+  app.js                express wiring
+  config/               every setting, validated once at boot
+  lib/                  logger, event bus, process spawning, passwords, validation, formatting
+  db/                   connection, versioned migrations, one repository per table
+  services/             deploy, docker, fleet (grouping), auth
+  http/
+    middleware/         auth, security headers, errors, view locals
+    routes/
+      webhook.routes.js
+      api/              versioned JSON API
+      ui/               one module per page + the SSE endpoints
+  tools/                hash-password
+views/
+  partials/             shell, sidebar, topbar, icon sprite, shared fragments
+  pages/                one template per page
+public/
+  css/                  tokens → base → layout → components → pages
+  js/                   theme (pre-paint), app (streams, palette, shortcuts)
+```
+
+The layering is strict in one direction: routes call services, services call the
+db layer and `lib`, and nothing calls back up. A route never runs SQL and a
+service never touches `req`.
+
+Database changes go in `src/db/migrations.js` as a new numbered entry — never by
+editing one that has shipped. Each runs once, in a transaction, and the applied
+version is stored in sqlite's `user_version`.
+
+---
+
+## Upgrading from deploy-server 1.x
+
+Nimbus2k is the same application, renamed and restructured. An in-place upgrade
+works, with three things to know:
+
+1. **Sign-in changed.** 1.x accepted a single `ADMIN_TOKEN` — and shipped a
+   hard-coded fallback for it. That is gone. Set `ADMIN_USER` and
+   `ADMIN_PASSWORD` (or `ADMIN_PASSWORD_HASH`) in `.env` before restarting, or
+   the process exits with an explanation. `ADMIN_TOKEN` survives as an optional
+   API-only bearer token.
+2. **The database is adopted automatically.** An existing
+   `data/deploy-server.db` (or `data/nimbus.db`) is renamed to
+   `data/nimbus2k.db` on first start and migrated: `repos` becomes `projects`,
+   and groups, container annotations, the audit log and the webhook delivery log
+   are added. Nothing is lost.
+3. **The API moved to `/api/v1`.** The old root-level `/repos`, `/deployments`
+   and `/status` are gone; `/webhook` and `/healthz` are unchanged.
+
+The compose service, container and volume are renamed, so the first
+`docker compose up -d --build` leaves the old container behind. Remove it once
+the new one is healthy:
+
+```bash
+docker rm -f deploy-server
+```
+
+---
+
+## Security notes
+
+- The webhook is HMAC-verified against the raw body, compared in constant time.
+- Sign-in checks the username and the password every time, even when the name is
+  already wrong, so both halves cost the same amount of work and the error
+  message never says which one was wrong.
+- Passwords may be stored as an scrypt digest (`N=16384, r=8, p=1`, 64-byte key,
+  random 16-byte salt) rather than in the clear.
+- The UI trades the credentials for a random session id once, kept in an
+  `HttpOnly`, `SameSite=Strict` cookie scoped to `/ui`. Sessions live in memory:
+  a restart signs everyone out.
+- Login is rate-limited per client address, so one attacker cannot lock the real
+  operator out.
+- Every state-changing request checks `Origin`, and the CSP allows no external
+  origin, no inline script and no framing.
+- No shell is involved anywhere. Commands are spawned with an argument array, so
+  a repository name, branch or container id can never be read as a command.
+- Every state-changing action is written to the audit log, visible under
+  Settings.
+- **Mounting the docker socket is equivalent to root on the host.** That is why
+  the port stays on loopback, the webhook is verified, the UI is behind a
+  password, and destructive container actions are off until you turn them on.

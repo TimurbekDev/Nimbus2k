@@ -1,0 +1,145 @@
+<%- include("../partials/head", { title: title, nav: nav }) %>
+
+<%
+  const link = (patch) => {
+      const params = new URLSearchParams();
+      const merged = { status: filters.status, project: filters.project, page: filters.page, ...patch };
+      for (const [key, value] of Object.entries(merged)) {
+          if (value && !(key === "page" && value === 1)) params.set(key, value);
+      }
+      const query = params.toString();
+      return query ? `/ui/deployments?${query}` : "/ui/deployments";
+  };
+%>
+
+<div class="page-head">
+    <div>
+        <h1>Deployments</h1>
+        <p class="lede">
+            Every run <%= app.name %> still keeps, newest first. History is capped per project,
+            so this is a window rather than all time.
+        </p>
+    </div>
+</div>
+
+<div data-refresh="15" hidden></div>
+
+<div class="grid-4">
+    <div class="tile info">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-history"></use></svg> Retained</span>
+        <span class="tile-value"><%= stats.total %></span>
+        <span class="tile-note"><%= stats.last24h %> in the last 24 hours</span>
+    </div>
+    <div class="tile ok">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-check-circle"></use></svg> Succeeded</span>
+        <span class="tile-value"><%= fmt.percent(stats.success, stats.total) %></span>
+        <span class="tile-note"><%= stats.success %> runs</span>
+    </div>
+    <div class="tile <%= stats.failed > 0 ? "bad" : "" %>">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-alert-circle"></use></svg> Failed</span>
+        <span class="tile-value"><%= stats.failed %></span>
+        <span class="tile-note"><%= stats.cancelled %> cancelled</span>
+    </div>
+    <div class="tile">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-clock"></use></svg> Average</span>
+        <span class="tile-value"><%= fmt.duration(stats.averageMs) %></span>
+        <span class="tile-note">successful runs only</span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-head">
+        <h2><svg class="i" aria-hidden="true"><use href="#i-activity"></use></svg> Last 30 days</h2>
+        <span class="t-sm dim"><%= activity.reduce(function (sum, d) { return sum + d.total; }, 0) %> runs</span>
+    </div>
+    <div class="card-body">
+        <% const peak = Math.max(...activity.map(function (d) { return d.total; }), 1); %>
+        <div class="activity" style="height:64px">
+            <% activity.forEach(function (day) { %>
+            <div class="bar <%= day.total === 0 ? "blank" : "" %>"
+                 title="<%= day.day %>: <%= day.total %> deploys, <%= day.failed %> failed">
+                <% if (day.failed > 0) { %>
+                <i class="fail" style="height: <%= Math.round((day.failed / peak) * 100) %>%"></i>
+                <% } %>
+                <i style="height: <%= Math.round(((day.total - day.failed) / peak) * 100) %>%"></i>
+            </div>
+            <% }) %>
+        </div>
+    </div>
+</div>
+
+<form class="fleet-toolbar" method="get" action="/ui/deployments" data-autosubmit>
+    <span class="toolbar-label">Status</span>
+    <div class="segmented">
+        <a href="<%= link({ status: null, page: 1 }) %>" <%= !filters.status ? 'aria-current="true"' : "" %>>All</a>
+        <a href="<%= link({ status: "success", page: 1 }) %>" <%= filters.status === "success" ? 'aria-current="true"' : "" %>>Success</a>
+        <a href="<%= link({ status: "failed", page: 1 }) %>" <%= filters.status === "failed" ? 'aria-current="true"' : "" %>>Failed</a>
+        <a href="<%= link({ status: "cancelled", page: 1 }) %>" <%= filters.status === "cancelled" ? 'aria-current="true"' : "" %>>Cancelled</a>
+        <a href="<%= link({ status: "running", page: 1 }) %>" <%= filters.status === "running" ? 'aria-current="true"' : "" %>>Running</a>
+    </div>
+
+    <% if (filters.status) { %><input type="hidden" name="status" value="<%= filters.status %>"><% } %>
+
+    <label class="field" style="width:200px;margin-left:auto">
+        <select name="project" aria-label="Filter by project">
+            <option value="">Every project</option>
+            <% projects.forEach(function (project) { %>
+            <option value="<%= project.name %>" <%= filters.project === project.name ? "selected" : "" %>><%= project.name %></option>
+            <% }) %>
+        </select>
+    </label>
+
+    <span class="t-sm dim"><%= total %> runs</span>
+</form>
+
+<div class="card">
+    <% if (deployments.length === 0) { %>
+    <div class="empty">
+        <svg class="i" aria-hidden="true"><use href="#i-history"></use></svg>
+        <h3>Nothing here</h3>
+        <p>No run matches this filter.</p>
+        <a class="btn ghost" href="/ui/deployments">Clear filters</a>
+    </div>
+    <% } else { %>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+            <tr><th>#</th><th>Project</th><th>Branch</th><th>Commit</th><th>Trigger</th>
+                <th>Status</th><th>Started</th><th class="right">Took</th><th></th></tr>
+            </thead>
+            <tbody>
+            <% deployments.forEach(function (item) { %>
+            <tr>
+                <td><a href="/ui/deployments/<%= item.id %>" class="mono">#<%= item.id %></a></td>
+                <td><a href="/ui/projects/<%= encodeURIComponent(item.project) %>"><%= item.project %></a></td>
+                <td><span class="badge mono plain"><%= item.branch %></span></td>
+                <td><code class="t-xs"><%= fmt.sha(item.commit_sha) %></code></td>
+                <td class="muted t-sm"><%= item.trigger %></td>
+                <td><%- include("../partials/status", { status: item.status }) %></td>
+                <td class="muted">
+                    <time datetime="<%= fmt.iso(item.started_at) %>" data-ago
+                          title="<%= fmt.stamp(item.started_at) %>"><%= fmt.ago(item.started_at) %></time>
+                </td>
+                <td class="num muted"><%= fmt.duration(item.duration_ms) %></td>
+                <td class="right">
+                    <a class="btn quiet icon sm" href="/ui/deployments/<%= item.id %>" title="Open">
+                        <svg class="i sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                    </a>
+                </td>
+            </tr>
+            <% }) %>
+            </tbody>
+        </table>
+    </div>
+
+    <% if (pages > 1) { %>
+    <div class="pager">
+        <a class="btn ghost sm <%= filters.page <= 1 ? "hidden" : "" %>" href="<%= link({ page: filters.page - 1 }) %>">Previous</a>
+        <span class="t-sm dim">Page <%= filters.page %> of <%= pages %></span>
+        <a class="btn ghost sm <%= filters.page >= pages ? "hidden" : "" %>" href="<%= link({ page: filters.page + 1 }) %>">Next</a>
+    </div>
+    <% } %>
+    <% } %>
+</div>
+
+<%- include("../partials/foot") %>

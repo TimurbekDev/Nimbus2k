@@ -1,0 +1,226 @@
+<%- include("../partials/head", { title: title, nav: nav }) %>
+
+<div class="page-head">
+    <div>
+        <h1>Settings</h1>
+        <p class="lede">
+            Everything here is read from the environment at boot. Change a value in
+            <code>.env</code> and restart <%= app.name %> for it to take effect.
+        </p>
+    </div>
+</div>
+
+<div class="grid-4">
+    <div class="tile <%= health.ok ? "ok" : "bad" %>">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-box"></use></svg> Docker</span>
+        <span class="tile-value"><%= health.ok ? health.version : "down" %></span>
+        <span class="tile-note"><%= health.ok ? "API " + health.api + " · " + health.os + "/" + health.arch : health.error %></span>
+    </div>
+
+    <div class="tile info">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-server"></use></svg> Host</span>
+        <span class="tile-value" style="font-size:var(--t-lg)"><%= runtime.host %></span>
+        <span class="tile-note"><%= runtime.platform %> · <%= runtime.cpus %> cpus</span>
+    </div>
+
+    <div class="tile">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-clock"></use></svg> Uptime</span>
+        <span class="tile-value"><%= fmt.duration(runtime.uptimeMs) %></span>
+        <span class="tile-note">node <%= runtime.node %> · <%= runtime.memoryMb %> MB rss</span>
+    </div>
+
+    <div class="tile">
+        <span class="tile-label"><svg class="i sm" aria-hidden="true"><use href="#i-shield"></use></svg> Sessions</span>
+        <span class="tile-value"><%= runtime.sessions %></span>
+        <span class="tile-note"><%= runtime.projects %> projects · <%= runtime.deployments %> runs kept</span>
+    </div>
+</div>
+
+<div class="grid-main">
+    <div class="stack">
+        <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-settings"></use></svg> Configuration</h2>
+                <span class="badge plain">read-only</span>
+            </div>
+            <div class="card-body flush">
+                <div class="table-wrap">
+                    <table class="data compact">
+                        <tbody>
+                        <% settings.forEach(function (item) { %>
+                        <tr>
+                            <td class="mono t-sm nowrap"><%= item.key %></td>
+                            <td class="mono t-sm"><%= item.value %></td>
+                            <td class="muted t-xs"><%= item.note %></td>
+                        </tr>
+                        <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <% if (unmanaged.length > 0) { %>
+        <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-layers"></use></svg> Stacks without a project</h2>
+                <span class="badge warn"><%= unmanaged.length %></span>
+            </div>
+            <div class="card-body stack tight">
+                <p class="t-sm muted">
+                    These compose stacks run on this host but no project deploys them. Register one
+                    to give it push-to-deploy.
+                </p>
+                <% unmanaged.forEach(function (item) { %>
+                <div class="member">
+                    <svg class="i sm" aria-hidden="true"><use href="#i-layers"></use></svg>
+                    <span class="truncate"><%= item.stack %></span>
+                    <span class="tail">
+                        <span class="badge plain"><%= item.containers %> containers</span>
+                        <% if (item.workdir) { %><code class="t-xs"><%= fmt.truncate(item.workdir, 40) %></code><% } %>
+                    </span>
+                </div>
+                <% }) %>
+                <a class="btn ghost sm" href="/ui/projects#register" style="justify-self:start">Register a project</a>
+            </div>
+        </div>
+        <% } %>
+
+        <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-shield"></use></svg> Audit log</h2>
+                <span class="badge plain">last <%= audit.length %></span>
+            </div>
+            <div class="card-body flush">
+                <% if (audit.length === 0) { %>
+                <div class="empty"><p>Nothing recorded yet.</p></div>
+                <% } else { %>
+                <div class="table-wrap" style="max-height:460px;overflow:auto">
+                    <table class="data compact">
+                        <thead>
+                        <tr><th>Action</th><th>Target</th><th>By</th><th>When</th></tr>
+                        </thead>
+                        <tbody>
+                        <% audit.forEach(function (entry) { %>
+                        <tr>
+                            <td>
+                                <span class="badge <%= entry.ok ? "plain" : "bad" %> mono"><%= entry.action %></span>
+                            </td>
+                            <td class="truncate" title="<%= entry.detail || "" %>"><%= entry.target || "—" %></td>
+                            <td class="muted t-sm"><%= entry.actor %><% if (entry.ip) { %> <span class="dim">· <%= entry.ip %></span><% } %></td>
+                            <td class="muted t-sm nowrap">
+                                <time datetime="<%= fmt.iso(entry.created_at) %>" data-ago
+                                      title="<%= fmt.stamp(entry.created_at) %>"><%= fmt.ago(entry.created_at) %></time>
+                            </td>
+                        </tr>
+                        <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <div class="stack">
+        <% if (usage.ok) { %>
+        <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-disk"></use></svg> Disk usage</h2>
+            </div>
+            <div class="card-body stack tight">
+                <% [
+                    { key: "images", label: "Images", target: "images" },
+                    { key: "containers", label: "Containers", target: "containers" },
+                    { key: "volumes", label: "Volumes", target: "volumes" },
+                    { key: "cache", label: "Build cache", target: "cache" },
+                ].forEach(function (row) { %>
+                <div class="member">
+                    <span class="truncate"><%= row.label %></span>
+                    <span class="tail">
+                        <span class="badge plain mono"><%= usage[row.key].size %></span>
+                        <% if (usage[row.key].reclaimable && usage[row.key].reclaimable !== "0B") { %>
+                        <span class="badge warn mono"><%= usage[row.key].reclaimable %> free-able</span>
+                        <% } %>
+                        <% if (canDestroy) { %>
+                        <form method="post" action="/ui/settings/prune">
+                            <input type="hidden" name="target" value="<%= row.target %>">
+                            <button class="btn quiet icon sm" type="submit" title="Prune <%= row.label.toLowerCase() %>"
+                                    data-confirm="Prune unused <%= row.label.toLowerCase() %>? This cannot be undone.">
+                                <svg class="i sm" aria-hidden="true"><use href="#i-broom"></use></svg>
+                            </button>
+                        </form>
+                        <% } %>
+                    </span>
+                </div>
+                <% }) %>
+
+                <% if (!canDestroy) { %>
+                <p class="t-xs dim">
+                    Pruning is disabled. Set <code>CONTAINER_DESTRUCTIVE_ACTIONS=true</code> to reclaim
+                    space from here.
+                </p>
+                <% } %>
+            </div>
+        </div>
+        <% } %>
+
+        <% if (info.ok) { %>
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-cpu"></use></svg> Daemon</h2></div>
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>Name</dt><dd><%= info.name %></dd>
+                    <dt>Containers</dt><dd><%= info.running %> running · <%= info.stopped %> stopped</dd>
+                    <dt>Images</dt><dd><%= info.images %></dd>
+                    <dt>CPUs</dt><dd><%= info.cpus %></dd>
+                    <dt>Memory</dt><dd><%= fmt.bytes(info.memory) %></dd>
+                    <dt>Storage</dt><dd><%= info.driver %></dd>
+                    <dt>Kernel</dt><dd class="t-sm"><%= info.kernel %></dd>
+                    <dt>OS</dt><dd class="t-sm"><%= info.os %></dd>
+                </dl>
+            </div>
+        </div>
+        <% } %>
+
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-zap"></use></svg> Webhook deliveries</h2></div>
+            <div class="card-body stack tight" style="max-height:380px;overflow:auto">
+                <% if (deliveries.length === 0) { %>
+                <p class="t-sm muted">
+                    Nothing received yet. Point a GitHub webhook at <code>/webhook</code> with content
+                    type <code>application/json</code> and the shared secret.
+                </p>
+                <% } %>
+                <% deliveries.forEach(function (item) { %>
+                <div class="col" style="padding:6px 0;border-bottom:1px solid var(--line-soft)">
+                    <div class="row tight">
+                        <span class="badge <%= item.outcome === "ignored" ? "idle" : item.outcome === "rejected" ? "bad" : "ok" %>"><%= item.outcome %></span>
+                        <span class="t-sm truncate"><%= item.repo || "—" %></span>
+                        <span class="t-xs dim" style="margin-left:auto">
+                            <time datetime="<%= fmt.iso(item.created_at) %>" data-ago><%= fmt.ago(item.created_at) %></time>
+                        </span>
+                    </div>
+                    <% if (item.detail) { %><span class="t-xs dim truncate"><%= item.detail %></span><% } %>
+                </div>
+                <% }) %>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-book"></use></svg> API</h2></div>
+            <div class="card-body">
+                <p class="t-sm muted">
+                    Everything the UI does is available over HTTP, authenticated with the bearer
+                    token or with the same username and password over Basic auth.
+                </p>
+                <pre class="log" style="max-height:180px;font-size:11.5px"><%= apiExample %></pre>
+                <p class="t-xs dim" style="margin-top:8px">
+                    <code>GET /api/v1</code> lists every endpoint.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include("../partials/foot") %>

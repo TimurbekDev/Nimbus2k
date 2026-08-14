@@ -1,0 +1,101 @@
+<%#
+  One container in the fleet list.
+  Locals: container, back (where an action returns to).
+%>
+<div class="crow" data-name="<%= container.name %>">
+    <div class="crow-state <%= container.health === "unhealthy" ? "bad" : container.tone %>"
+         title="<%= container.status %>">
+        <span class="dot <%= container.running && container.health !== "unhealthy" ? "pulse" : "" %>"></span>
+    </div>
+
+    <div class="crow-name">
+        <a href="/ui/containers/<%= encodeURIComponent(container.name) %>" class="truncate"><%= container.name %></a>
+        <span class="sub">
+            <% if (container.service) { %><span><%= container.service %></span><% } %>
+            <% if (container.stack) { %><span>· <%= container.stack %></span><% } %>
+            <% if (container.pinned) { %>
+            <svg class="i sm" aria-hidden="true"><use href="#i-pin"></use></svg>
+            <% } %>
+            <% if (container.group) { %>
+            <span class="badge hue g-<%= container.group.color %>"><span class="swatch"></span><%= container.group.name %></span>
+            <% } %>
+            <% if (container.health) { %>
+            <span class="badge <%= container.health === "healthy" ? "ok" : container.health === "unhealthy" ? "bad" : "warn" %>"><%= container.health %></span>
+            <% } %>
+        </span>
+    </div>
+
+    <div class="crow-image truncate" title="<%= container.image %>"><%= fmt.image(container.image) %></div>
+
+    <div class="col-cpu">
+        <% if (container.stats) { %>
+        <div class="meter-row">
+            <div class="meter <%= container.stats.cpu > 85 ? "bad" : container.stats.cpu > 60 ? "warn" : "" %>">
+                <span style="width: <%= Math.min(container.stats.cpu, 100) %>%"></span>
+            </div>
+            <b><%= container.stats.cpu.toFixed(1) %>%</b>
+        </div>
+        <% } else { %><span class="dim t-xs">—</span><% } %>
+    </div>
+
+    <div class="col-mem">
+        <% if (container.stats) { %>
+        <div class="meter-row">
+            <div class="meter <%= container.stats.memPercent > 85 ? "bad" : container.stats.memPercent > 60 ? "warn" : "" %>">
+                <span style="width: <%= Math.min(container.stats.memPercent, 100) %>%"></span>
+            </div>
+            <b><%= container.stats.mem ? container.stats.mem.split(" / ")[0] : "" %></b>
+        </div>
+        <% } else { %><span class="dim t-xs">—</span><% } %>
+    </div>
+
+    <div class="col-ports crow-ports">
+        <% if (container.ports.length === 0) { %>
+        <span class="dim t-xs"><%= container.running ? fmt.truncate(container.uptime || "", 18) : (container.status || "").slice(0, 22) %></span>
+        <% } %>
+        <% container.ports.slice(0, 3).forEach(function (port) { %>
+        <span class="badge mono <%= port.public ? "info" : "plain" %>"
+              title="<%= port.host || "" %><%= port.published ? ":" + port.published : "" %> → <%= port.container %>/<%= port.protocol %>">
+            <%= port.published || port.container %>
+        </span>
+        <% }) %>
+        <% if (container.ports.length > 3) { %>
+        <span class="badge plain">+<%= container.ports.length - 3 %></span>
+        <% } %>
+    </div>
+
+    <div class="crow-actions">
+        <% if (canAct) { %>
+        <% if (container.running) { %>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="hidden" name="action" value="restart">
+            <button class="btn quiet icon sm" type="submit" title="Restart"
+                    data-confirm="Restart <%= container.name %>?">
+                <svg class="i sm" aria-hidden="true"><use href="#i-rotate"></use></svg>
+            </button>
+        </form>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="hidden" name="action" value="stop">
+            <button class="btn quiet icon sm" type="submit" title="Stop"
+                    data-confirm="Stop <%= container.name %>?">
+                <svg class="i sm" aria-hidden="true"><use href="#i-square"></use></svg>
+            </button>
+        </form>
+        <% } else { %>
+        <form method="post" action="/ui/containers/<%= encodeURIComponent(container.name) %>/action">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="hidden" name="action" value="start">
+            <button class="btn quiet icon sm" type="submit" title="Start">
+                <svg class="i sm" aria-hidden="true"><use href="#i-play"></use></svg>
+            </button>
+        </form>
+        <% } %>
+        <% } %>
+
+        <a class="btn quiet icon sm" href="/ui/containers/<%= encodeURIComponent(container.name) %>" title="Details">
+            <svg class="i sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
+    </div>
+</div>

@@ -1,0 +1,23 @@
+<%- include("../partials/head", { title: title, nav: nav }) %>
+
+<div class="message-page">
+    <div class="message-card <%= typeof tone === "undefined" ? "" : tone %>">
+        <span class="glyph">
+            <svg class="i lg" aria-hidden="true">
+                <use href="#i-<%= tone === "bad" ? "alert-circle" : tone === "warn" ? "alert-triangle" : "info" %>"></use>
+            </svg>
+        </span>
+
+        <h1><%= heading %></h1>
+        <% if (body) { %><p class="body"><%= body %></p><% } %>
+
+        <% if (typeof action !== "undefined" && action) { %>
+        <a class="btn" href="<%= action.href %>">
+            <svg class="i" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+            <%= action.label %>
+        </a>
+        <% } %>
+    </div>
+</div>
+
+<%- include("../partials/foot") %>

@@ -1,0 +1,314 @@
+<%- include("../partials/head", {
+    title: title,
+    nav: nav,
+    crumbs: [{ label: "Projects", href: "/ui/projects" }, { label: project.name }],
+}) %>
+
+<% const back = "/ui/projects/" + encodeURIComponent(project.name); %>
+
+<div class="detail-hero">
+    <div>
+        <h1>
+            <span class="avatar <%= project.group ? "hue g-" + project.group.color : "" %>"
+                  <%= project.group ? 'style="--hue: var(--g-' + project.group.color + ')"' : "" %>><%= fmt.initials(project.name) %></span>
+            <%= project.name %>
+            <% if (active) { %><span class="badge warn"><span class="dot pulse"></span>deploying</span><% } %>
+            <% if (!project.enabled) { %><span class="badge idle">paused</span><% } %>
+            <% if (!project.auto_deploy) { %><span class="badge idle">manual only</span><% } %>
+        </h1>
+
+        <p class="sub">
+            <span class="badge mono plain"><%= project.branch %></span>
+            <% if (project.group) { %>
+            <span class="badge hue g-<%= project.group.color %>"><span class="swatch"></span><%= project.group.name %></span>
+            <% } %>
+            <% if (project.description) { %><span style="margin-left:6px"><%= project.description %></span><% } %>
+        </p>
+
+        <p class="t-sm dim mono" style="margin-top:6px"><%= project.path %></p>
+    </div>
+
+    <div class="detail-actions">
+        <% if (active) { %>
+        <a class="btn ghost" href="/ui/deployments/<%= active.id %>">
+            <svg class="i" aria-hidden="true"><use href="#i-terminal"></use></svg>
+            Watch log
+        </a>
+        <form method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/cancel">
+            <input type="hidden" name="back" value="<%= back %>">
+            <button class="btn danger" type="submit" data-confirm="Cancel the running deploy?">
+                <svg class="i" aria-hidden="true"><use href="#i-x"></use></svg>
+                Cancel deploy
+            </button>
+        </form>
+        <% } else { %>
+        <form class="row tight" method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/deploy">
+            <input type="hidden" name="back" value="<%= back %>">
+            <input type="text" name="branch" placeholder="<%= project.branch %>" autocomplete="off" style="width:150px">
+            <button class="btn" type="submit" <%= project.enabled ? "" : "disabled" %>>
+                <svg class="i" aria-hidden="true"><use href="#i-zap"></use></svg>
+                Deploy now
+            </button>
+        </form>
+        <% } %>
+    </div>
+</div>
+
+<div data-refresh="12" hidden></div>
+
+<div class="grid-main">
+    <div class="stack">
+        <%# ------------------------------------------------------ containers %>
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="i" aria-hidden="true"><use href="#i-box"></use></svg>
+                    Containers
+                    <% if (containers.ok) { %>
+                    <span class="badge <%= containers.totals.unhealthy ? "bad" : containers.totals.stopped ? "warn" : "ok" %>">
+                        <%= containers.totals.running %>/<%= containers.totals.total %> up
+                    </span>
+                    <% } %>
+                </h2>
+
+                <% if (containers.ok && containers.containers.length > 0 && canAct) { %>
+                <form method="post" action="/ui/containers/bulk">
+                    <input type="hidden" name="back" value="<%= back %>">
+                    <input type="hidden" name="project" value="<%= project.name %>">
+                    <input type="hidden" name="action" value="restart">
+                    <button class="btn ghost sm" type="submit"
+                            data-confirm="Restart every container of <%= project.name %>?">
+                        <svg class="i sm" aria-hidden="true"><use href="#i-rotate"></use></svg>
+                        Restart all
+                    </button>
+                </form>
+                <% } %>
+            </div>
+
+            <% if (!containers.ok) { %>
+            <div class="card-body">
+                <div class="banner warn">
+                    <svg class="i" aria-hidden="true"><use href="#i-alert-triangle"></use></svg>
+                    <div>The docker daemon is not reachable, so container state is unknown.</div>
+                </div>
+            </div>
+            <% } else if (containers.containers.length === 0) { %>
+            <div class="empty">
+                <svg class="i" aria-hidden="true"><use href="#i-box"></use></svg>
+                <h3>No containers found for this project</h3>
+                <p>
+                    Containers are matched by the compose project name, which defaults to
+                    <code><%= containers.stack %></code>. If this stack uses a different name,
+                    set it in the settings below.
+                </p>
+            </div>
+            <% } else { %>
+            <div class="bucket-body">
+                <% containers.containers.forEach(function (container) { %>
+                <%- include("../partials/container-row", { container: container, back: back }) %>
+                <% }) %>
+            </div>
+            <% } %>
+        </div>
+
+        <%# --------------------------------------------------------- history %>
+        <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-history"></use></svg> Deploy history</h2>
+                <div class="row tight">
+                    <%- include("../partials/spark", { history: sparkline }) %>
+                    <a class="btn ghost sm" href="/ui/deployments?project=<%= encodeURIComponent(project.name) %>">All runs</a>
+                </div>
+            </div>
+
+            <% if (history.length === 0) { %>
+            <div class="empty">
+                <svg class="i" aria-hidden="true"><use href="#i-history"></use></svg>
+                <h3>Nothing deployed yet</h3>
+                <p>Push to <code><%= project.branch %></code>, or use "Deploy now" above.</p>
+            </div>
+            <% } else { %>
+            <div class="card-body flush">
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr><th>#</th><th>Branch</th><th>Commit</th><th>Trigger</th><th>Status</th>
+                            <th>Started</th><th class="right">Took</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                        <% history.forEach(function (item) { %>
+                        <tr>
+                            <td><a href="/ui/deployments/<%= item.id %>" class="mono">#<%= item.id %></a></td>
+                            <td><span class="badge mono plain"><%= item.branch %></span></td>
+                            <td><code class="t-xs"><%= fmt.sha(item.commit_sha) %></code></td>
+                            <td class="muted t-sm"><%= item.trigger %></td>
+                            <td><%- include("../partials/status", { status: item.status }) %></td>
+                            <td class="muted">
+                                <time datetime="<%= fmt.iso(item.started_at) %>" data-ago
+                                      title="<%= fmt.stamp(item.started_at) %>"><%= fmt.ago(item.started_at) %></time>
+                            </td>
+                            <td class="num muted"><%= fmt.duration(item.duration_ms) %></td>
+                            <td class="right">
+                                <% if (!active && item.status !== "running") { %>
+                                <form method="post" action="/ui/deployments/<%= item.id %>/redeploy">
+                                    <input type="hidden" name="back" value="<%= back %>">
+                                    <button class="btn quiet icon sm" type="submit" title="Deploy this branch again"
+                                            data-confirm="Deploy <%= item.branch %> again?">
+                                        <svg class="i sm" aria-hidden="true"><use href="#i-rotate"></use></svg>
+                                    </button>
+                                </form>
+                                <% } %>
+                            </td>
+                        </tr>
+                        <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <% } %>
+        </div>
+    </div>
+
+    <%# ------------------------------------------------------------ sidebar %>
+    <div class="stack">
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-list"></use></svg> Deploy plan</h2></div>
+            <div class="card-body">
+                <div class="steps">
+                    <% plan.forEach(function (step, index) { %>
+                    <div class="step">
+                        <span class="n"><%= index + 1 %></span>
+                        <div class="col" style="min-width:0">
+                            <span class="strong"><%= step.name %></span>
+                            <code><%= step.command %> <%= step.args.join(" ") %></code>
+                        </div>
+                    </div>
+                    <% }) %>
+                </div>
+                <p class="t-xs dim" style="margin-top:10px">
+                    Run in the checkout, in order. A step that fails stops the run.
+                </p>
+            </div>
+        </div>
+
+        <% if (delivery) { %>
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-zap"></use></svg> Last webhook</h2></div>
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>Outcome</dt>
+                    <dd><span class="badge <%= delivery.outcome === "ignored" ? "idle" : delivery.outcome === "rejected" ? "bad" : "ok" %>"><%= delivery.outcome %></span></dd>
+                    <dt>Branch</dt><dd><code class="t-xs"><%= delivery.branch || "—" %></code></dd>
+                    <dt>Commit</dt><dd><code class="t-xs"><%= fmt.sha(delivery.commit_sha) %></code></dd>
+                    <dt>When</dt><dd><time datetime="<%= fmt.iso(delivery.created_at) %>" data-ago><%= fmt.ago(delivery.created_at) %></time></dd>
+                    <% if (delivery.detail) { %><dt>Detail</dt><dd class="t-sm"><%= delivery.detail %></dd><% } %>
+                </dl>
+            </div>
+        </div>
+        <% } %>
+
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-settings"></use></svg> Settings</h2></div>
+            <div class="card-body">
+                <form class="form-grid" method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/settings">
+                    <label class="field">
+                        Branch
+                        <input type="text" name="branch" value="<%= project.branch %>" autocomplete="off">
+                        <span class="hint">Only pushes to this branch deploy.</span>
+                    </label>
+
+                    <label class="field">
+                        Compose file
+                        <input type="text" name="compose_file" value="<%= project.compose_file || "" %>" autocomplete="off"
+                               placeholder="docker-compose.prod.yml">
+                        <span class="hint">Passed as <code>-f</code>, relative to the checkout.</span>
+                    </label>
+
+                    <label class="field">
+                        Compose project name
+                        <input type="text" name="stack" value="<%= project.stack || "" %>" autocomplete="off"
+                               placeholder="<%= containers.stack || project.name %>">
+                        <span class="hint">Only needed when the stack name differs from the checkout directory.</span>
+                    </label>
+
+                    <label class="field">
+                        Group
+                        <select name="group_id">
+                            <option value="">No group</option>
+                            <% groups.forEach(function (group) { %>
+                            <option value="<%= group.id %>" <%= project.group_id === group.id ? "selected" : "" %>><%= group.name %></option>
+                            <% }) %>
+                        </select>
+                    </label>
+
+                    <label class="field">
+                        Description
+                        <input type="text" name="description" value="<%= project.description || "" %>" autocomplete="off">
+                    </label>
+
+                    <label class="check">
+                        <input type="checkbox" name="enabled" <%= project.enabled ? "checked" : "" %>>
+                        <span>
+                            <span class="title">Enabled</span>
+                            <span class="hint">Unticked ignores pushes and blocks manual deploys, without dropping history.</span>
+                        </span>
+                    </label>
+
+                    <label class="check">
+                        <input type="checkbox" name="auto_deploy" <%= project.auto_deploy ? "checked" : "" %>>
+                        <span>
+                            <span class="title">Deploy on push</span>
+                            <span class="hint">Off means the webhook is recorded but never triggers a run.</span>
+                        </span>
+                    </label>
+
+                    <label class="check">
+                        <input type="checkbox" name="prune_images" <%= project.prune_images ? "checked" : "" %>>
+                        <span>
+                            <span class="title">Prune images after build</span>
+                            <span class="hint">Runs <code>docker image prune -f</code> once the stack is up.</span>
+                        </span>
+                    </label>
+
+                    <label class="check">
+                        <input type="checkbox" name="clean_untracked" <%= project.clean_untracked ? "checked" : "" %>>
+                        <span>
+                            <span class="title">Clean untracked files</span>
+                            <span class="hint">Runs <code>git clean -fd</code>; this deletes a repo-local <code>.env</code>.</span>
+                        </span>
+                    </label>
+
+                    <label class="check">
+                        <input type="checkbox" name="pinned" <%= project.pinned ? "checked" : "" %>>
+                        <span>
+                            <span class="title">Pin to the top</span>
+                            <span class="hint">Keeps this project first in every list.</span>
+                        </span>
+                    </label>
+
+                    <div class="form-actions">
+                        <button class="btn" type="submit">Save settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <details class="disclosure">
+            <summary><svg class="i" aria-hidden="true"><use href="#i-trash"></use></svg> Remove this project</summary>
+            <div class="body">
+                <p class="t-sm muted">
+                    Removes the registry row and its deploy history. The checkout on disk and
+                    everything it has running are left exactly as they are.
+                </p>
+                <form method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/delete">
+                    <button class="btn danger" type="submit"
+                            data-confirm="Remove <%= project.name %> from <%= app.name %>? Its containers keep running.">
+                        Remove from <%= app.name %>
+                    </button>
+                </form>
+            </div>
+        </details>
+    </div>
+</div>
+
+<%- include("../partials/foot") %>

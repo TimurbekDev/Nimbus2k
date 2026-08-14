@@ -1,0 +1,323 @@
+/* The application shell: a fixed sidebar, a sticky topbar, and the page. */
+
+.shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+.shell[data-collapsed="1"] { grid-template-columns: var(--sidebar-w-collapsed) minmax(0, 1fr); }
+
+/* ---------------------------------------------------------------- sidebar */
+
+.sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 12px;
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+    z-index: 30;
+    transition: width var(--base);
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 14px;
+    color: var(--text);
+    min-width: 0;
+}
+
+.brand:hover { color: var(--text); }
+
+.brand-mark {
+    width: 30px;
+    height: 30px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: linear-gradient(140deg, var(--brand), var(--brand-2));
+    color: #fff;
+    box-shadow: 0 4px 14px var(--brand-soft);
+}
+
+.brand-mark .i { width: 17px; height: 17px; stroke-width: 2; }
+
+/* Two lines, not a wrapped sentence: the name and the tagline are separate
+ * pieces of information and the rail is narrow. */
+.brand-text { display: grid; min-width: 0; }
+
+.brand-name {
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+}
+
+.brand-sub {
+    font-size: 9.5px;
+    color: var(--text-3);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    /* The rail is 232px wide; a two-line tagline reads as a mistake. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+}
+
+.nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 8px 10px;
+    border-radius: var(--r-sm);
+    color: var(--text-2);
+    font-size: var(--t-md);
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background var(--fast), color var(--fast);
+}
+
+button.nav-link {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: var(--t-md);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+
+.nav-link:hover { background: var(--surface-hover); color: var(--text); }
+
+.nav-link[aria-current="page"] {
+    background: var(--brand-soft);
+    color: var(--brand-text);
+}
+
+.nav-link[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 18px;
+    border-radius: 0 3px 3px 0;
+    background: var(--brand);
+}
+
+.nav-count {
+    margin-left: auto;
+    font-size: var(--t-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-3);
+    background: var(--surface-3);
+    border-radius: var(--r-full);
+    padding: 0 6px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.nav-link[aria-current="page"] .nav-count { background: var(--brand-line); color: var(--text); }
+
+.sidebar-foot {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    display: grid;
+    gap: 8px;
+}
+
+.sidebar-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    font-size: var(--t-xs);
+    color: var(--text-3);
+}
+
+/* Collapsed rail: icons only, labels revealed on hover as a tooltip. */
+.shell[data-collapsed="1"] .brand-text,
+.shell[data-collapsed="1"] .nav-label,
+.shell[data-collapsed="1"] .nav-count,
+.shell[data-collapsed="1"] .sidebar-meta span:last-child { display: none; }
+
+.shell[data-collapsed="1"] .nav-link { justify-content: center; padding: 9px 0; }
+.shell[data-collapsed="1"] .brand { justify-content: center; padding-left: 0; padding-right: 0; }
+
+.shell[data-collapsed="1"] .nav-link::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 10px);
+    padding: 5px 9px;
+    background: var(--surface-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-md);
+    font-size: var(--t-sm);
+    color: var(--text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-4px);
+    transition: opacity var(--fast), transform var(--fast);
+    z-index: 40;
+}
+
+.shell[data-collapsed="1"] .nav-link:hover::after { opacity: 1; transform: none; }
+
+/* ---------------------------------------------------------------- topbar */
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: var(--topbar-h);
+    padding: 0 20px;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+}
+
+.topbar-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+
+.topbar-title h1 { font-size: var(--t-lg); }
+
+.crumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--t-sm);
+    color: var(--text-3);
+    min-width: 0;
+}
+
+.crumbs a { color: var(--text-2); }
+.crumbs a:hover { color: var(--text); }
+.crumbs .sep { color: var(--text-3); opacity: 0.6; }
+
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* The command palette trigger doubles as the global search affordance. */
+.palette-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 210px;
+    padding: 6px 8px 6px 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    color: var(--text-3);
+    font-size: var(--t-md);
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color var(--fast), background var(--fast);
+}
+
+.palette-trigger:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.palette-trigger kbd { margin-left: auto; }
+
+/* ---------------------------------------------------------------- page */
+
+.page {
+    flex: 1;
+    width: 100%;
+    max-width: var(--page-max);
+    margin: 0 auto;
+    padding: 22px 20px 72px;
+    display: grid;
+    gap: 18px;
+    align-content: start;
+}
+
+.page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.page-head h1 { font-size: var(--t-2xl); letter-spacing: -0.02em; }
+.page-head .lede { color: var(--text-2); font-size: var(--t-md); margin-top: 3px; max-width: 68ch; }
+
+.section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- grids */
+
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.grid-main { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+
+/* ---------------------------------------------------------------- mobile */
+
+.sidebar-toggle, .mobile-only { display: none; }
+
+@media (max-width: 1100px) {
+    .grid-main, .grid-3, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+    .shell, .shell[data-collapsed="1"] { grid-template-columns: minmax(0, 1fr); }
+
+    .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: var(--sidebar-w);
+        transform: translateX(-100%);
+        transition: transform var(--base);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .shell[data-mobile="open"] .sidebar { transform: none; }
+
+    .shell[data-mobile="open"]::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: var(--overlay);
+        z-index: 25;
+    }
+
+    .sidebar-toggle, .mobile-only { display: inline-flex; }
+    .palette-trigger { min-width: 0; }
+    .palette-trigger span, .palette-trigger kbd { display: none; }
+    .grid-2, .grid-3, .grid-4, .grid-main { grid-template-columns: minmax(0, 1fr); }
+    .page { padding: 16px 14px 60px; }
+    .topbar { padding: 0 14px; }
+}

@@ -1,0 +1,207 @@
+<%- include("../partials/head", { title: title, nav: nav }) %>
+
+<div class="page-head">
+    <div>
+        <h1>Projects</h1>
+        <p class="lede">
+            A project is one git checkout on this host plus the compose file it brings up.
+            A push to its branch deploys it.
+        </p>
+    </div>
+
+    <div class="row tight">
+        <div class="segmented">
+            <a href="/ui/projects?group=group" <%= groupBy === "group" ? 'aria-current="true"' : "" %>>
+                <svg class="i sm" aria-hidden="true"><use href="#i-folder"></use></svg> Group
+            </a>
+            <a href="/ui/projects?group=status" <%= groupBy === "status" ? 'aria-current="true"' : "" %>>
+                <svg class="i sm" aria-hidden="true"><use href="#i-activity"></use></svg> Status
+            </a>
+            <a href="/ui/projects?group=none" <%= groupBy === "none" ? 'aria-current="true"' : "" %>>
+                <svg class="i sm" aria-hidden="true"><use href="#i-list"></use></svg> Flat
+            </a>
+        </div>
+        <a class="btn" href="#register">
+            <svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>
+            Register
+        </a>
+    </div>
+</div>
+
+<div data-refresh="15" hidden></div>
+
+<form class="fleet-toolbar" method="get" action="/ui/projects" data-autosubmit>
+    <input type="hidden" name="group" value="<%= groupBy %>">
+    <div class="input-icon search">
+        <svg class="i" aria-hidden="true"><use href="#i-search"></use></svg>
+        <input type="search" name="q" value="<%= search %>" data-search
+               placeholder="Filter projects…" autocomplete="off">
+    </div>
+    <span class="t-sm dim"><%= projects.length %> of <%= total %></span>
+</form>
+
+<% if (total === 0) { %>
+<div class="card">
+    <div class="empty">
+        <svg class="i" aria-hidden="true"><use href="#i-git"></use></svg>
+        <h3>No projects yet</h3>
+        <p>
+            A push from a repository with a checkout under <code><%= projectsDir %></code>
+            registers itself automatically. Or add one by hand below.
+        </p>
+        <a class="btn" href="#register">Register a project</a>
+    </div>
+</div>
+<% } %>
+
+<% buckets.forEach(function (bucket) { %>
+<section class="stack tight">
+    <% if (groupBy !== "none") { %>
+    <div class="section-head">
+        <h2 class="row tight">
+            <% if (bucket.group) { %>
+            <span class="swatch g-<%= bucket.group.color %>" style="--hue: var(--g-<%= bucket.group.color %>)"></span>
+            <% } %>
+            <%= bucket.title %>
+            <span class="badge plain"><%= bucket.projects.length %></span>
+        </h2>
+
+        <% if (bucket.group) { %>
+        <form method="post" action="/ui/groups/<%= bucket.group.id %>/deploy">
+            <button class="btn ghost sm" type="submit"
+                    data-confirm="Deploy every enabled project in <%= bucket.title %>?">
+                <svg class="i sm" aria-hidden="true"><use href="#i-zap"></use></svg>
+                Deploy group
+            </button>
+        </form>
+        <% } %>
+    </div>
+    <% } %>
+
+    <div class="grid-auto">
+        <% bucket.projects.forEach(function (project) { %>
+        <% const running = activeNames.includes(project.name); %>
+        <article class="project-card" data-status="<%= project.last_status || "" %>" data-running="<%= running ? 1 : 0 %>">
+            <div class="row between">
+                <div class="project-title">
+                    <span class="avatar <%= project.group ? "hue g-" + project.group.color : "" %>"
+                          <%= project.group ? 'style="--hue: var(--g-' + project.group.color + ')"' : "" %>><%= fmt.initials(project.name) %></span>
+                    <div class="col" style="min-width:0">
+                        <a href="/ui/projects/<%= encodeURIComponent(project.name) %>" class="truncate"><%= project.name %></a>
+                        <span class="project-meta">
+                            <span class="mono"><%= project.branch %></span>
+                            <% if (project.group) { %>· <span><%= project.group.name %></span><% } %>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="row tight">
+                    <% if (running) { %>
+                    <span class="badge warn"><span class="dot pulse"></span>deploying</span>
+                    <% } else if (!project.enabled) { %>
+                    <span class="badge idle">paused</span>
+                    <% } %>
+                </div>
+            </div>
+
+            <% if (project.description) { %>
+            <p class="t-sm muted truncate"><%= project.description %></p>
+            <% } %>
+
+            <div class="row between">
+                <div class="row tight">
+                    <% if (project.last_id) { %>
+                    <a href="/ui/deployments/<%= project.last_id %>">
+                        <%- include("../partials/status", { status: project.last_status }) %>
+                    </a>
+                    <time class="t-xs dim" datetime="<%= fmt.iso(project.last_started_at) %>" data-ago
+                          title="<%= fmt.stamp(project.last_started_at) %>"><%= fmt.ago(project.last_started_at) %></time>
+                    <% } else { %>
+                    <span class="badge idle">never deployed</span>
+                    <% } %>
+                </div>
+
+                <%- include("../partials/spark", { history: project.history }) %>
+            </div>
+
+            <div class="project-foot">
+                <span class="t-xs dim truncate" title="<%= project.path %>"><%= project.path %></span>
+
+                <div class="row tight">
+                    <% if (running) { %>
+                    <form method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/cancel">
+                        <input type="hidden" name="back" value="/ui/projects">
+                        <button class="btn danger sm" type="submit" data-confirm="Cancel the running deploy?">Cancel</button>
+                    </form>
+                    <% } else { %>
+                    <form method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/deploy">
+                        <input type="hidden" name="back" value="/ui/projects">
+                        <button class="btn ghost sm" type="submit" <%= project.enabled ? "" : "disabled" %>>
+                            <svg class="i sm" aria-hidden="true"><use href="#i-zap"></use></svg>
+                            Deploy
+                        </button>
+                    </form>
+                    <% } %>
+                </div>
+            </div>
+        </article>
+        <% }) %>
+    </div>
+</section>
+<% }) %>
+
+<section class="card" id="register">
+    <div class="card-head">
+        <h2><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg> Register a project</h2>
+    </div>
+    <div class="card-body">
+        <p class="t-sm muted" style="margin-bottom:14px">
+            Only needed when auto-registration is off, or when the checkout lives outside
+            <code><%= projectsDir %></code>. The name has to match the GitHub repository name exactly.
+        </p>
+
+        <form class="form-grid two" method="post" action="/ui/projects">
+            <label class="field">
+                Name
+                <input type="text" name="name" placeholder="my-app" autocomplete="off" required>
+                <span class="hint">Must equal the GitHub repository name.</span>
+            </label>
+
+            <label class="field">
+                Branch
+                <input type="text" name="branch" placeholder="main" autocomplete="off">
+                <span class="hint">Only pushes to this branch deploy.</span>
+            </label>
+
+            <label class="field">
+                Checkout path
+                <input type="text" name="path" placeholder="<%= projectsDir %>/my-app" autocomplete="off">
+                <span class="hint">Absolute path to an existing git checkout.</span>
+            </label>
+
+            <label class="field">
+                Group
+                <select name="group_id">
+                    <option value="">No group</option>
+                    <% groups.forEach(function (group) { %>
+                    <option value="<%= group.id %>"><%= group.name %></option>
+                    <% }) %>
+                </select>
+            </label>
+
+            <label class="field" style="grid-column: 1 / -1">
+                Description
+                <input type="text" name="description" placeholder="What this service does" autocomplete="off">
+            </label>
+
+            <div class="form-actions" style="grid-column: 1 / -1">
+                <button class="btn" type="submit">
+                    <svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>
+                    Register
+                </button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<%- include("../partials/foot") %>

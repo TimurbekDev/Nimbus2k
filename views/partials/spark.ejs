@@ -1,0 +1,14 @@
+<%#
+  The last few runs of one project as a strip of outcomes, most recent on the
+  right. Bar height encodes duration relative to the slowest run in the strip,
+  so a build that suddenly got slower is visible without reading a number.
+  Locals: history (array of { status, duration_ms }).
+%>
+<% if (history && history.length) { %>
+<% const peak = Math.max(...history.map((run) => run.duration_ms || 0), 1); %>
+<span class="spark" title="<%= history.length %> most recent deploys">
+    <% history.forEach(function (run) { %>
+    <i class="<%= run.status %>" style="height: <%= Math.max(Math.round(((run.duration_ms || 0) / peak) * 100), 18) %>%"></i>
+    <% }) %>
+</span>
+<% } %>

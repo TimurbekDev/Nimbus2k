@@ -1,0 +1,304 @@
+/* Page-specific composition. Anything reused twice belongs in components.css. */
+
+/* ------------------------------------------------------------------ login */
+
+.login-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+        radial-gradient(900px 500px at 15% -10%, var(--brand-soft), transparent 65%),
+        radial-gradient(700px 420px at 105% 110%, color-mix(in srgb, var(--brand-2) 12%, transparent), transparent 60%),
+        var(--bg);
+}
+
+.login-card {
+    width: min(400px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-lg);
+    padding: 30px 28px 26px;
+}
+
+.login-brand { display: grid; justify-items: center; gap: 12px; margin-bottom: 22px; text-align: center; }
+.login-brand .brand-mark { width: 44px; height: 44px; border-radius: 13px; }
+.login-brand .brand-mark .i { width: 24px; height: 24px; }
+.login-brand h1 { font-size: var(--t-xl); }
+.login-brand p { color: var(--text-3); font-size: var(--t-sm); }
+
+.login-card .form-grid { gap: 14px; }
+.login-foot { margin-top: 18px; text-align: center; font-size: var(--t-xs); color: var(--text-3); }
+
+/* ------------------------------------------------------------------ fleet */
+
+.fleet-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 15;
+}
+
+.fleet-toolbar .search { flex: 1 1 220px; min-width: 180px; max-width: 340px; }
+.toolbar-label { font-size: var(--t-xs); color: var(--text-3); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* One bucket of containers: stack, group, project, state or image. */
+.bucket {
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.bucket[data-tone="bad"] { border-color: var(--bad-line); }
+.bucket[data-tone="warn"] { border-color: var(--warn-line); }
+
+.bucket-head {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    user-select: none;
+    flex-wrap: wrap;
+}
+
+.bucket-head:hover { background: var(--surface-3); }
+.bucket-head h3 { font-size: var(--t-md); display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bucket-head .caret { transition: transform var(--fast); color: var(--text-3); }
+.bucket[data-open="0"] .caret { transform: rotate(-90deg); }
+.bucket[data-open="0"] .bucket-body { display: none; }
+
+.bucket-stats { display: flex; align-items: center; gap: 7px; margin-left: auto; flex-wrap: wrap; }
+.bucket-actions { display: flex; gap: 6px; }
+
+.bucket-body { display: grid; }
+
+/* A container row is a table row that has to stay readable at three widths, so
+ * it is a grid rather than a <table>. */
+.crow {
+    display: grid;
+    /* The action column is a fixed width rather than `auto`: the header row has
+     * no buttons in it, and an auto track would size itself differently there
+     * and knock every column out of line. */
+    grid-template-columns: 20px minmax(180px, 2.1fr) minmax(140px, 1.5fr) 118px 104px minmax(96px, 0.9fr) 96px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    transition: background var(--fast);
+}
+
+/* Every row is its own grid, so a long image name in one row would widen that
+ * row's fr tracks and pull it out of line with the header. Pinning the minimum
+ * keeps every track the same width down the whole list. */
+.crow > * { min-width: 0; }
+
+.crow:last-child { border-bottom: 0; }
+.crow:hover { background: var(--surface-hover); }
+.crow.head {
+    padding-top: 7px;
+    padding-bottom: 7px;
+    background: transparent;
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+}
+
+.crow.head:hover { background: transparent; }
+
+.crow-state { display: grid; place-items: center; }
+.crow-state .dot { width: 8px; height: 8px; }
+.crow-state.ok { color: var(--ok); }
+.crow-state.warn { color: var(--warn); }
+.crow-state.bad { color: var(--bad); }
+.crow-state.idle { color: var(--idle); }
+
+.crow-name { display: grid; gap: 2px; min-width: 0; }
+.crow-name a { color: var(--text); font-weight: 550; }
+.crow-name a:hover { color: var(--brand); }
+.crow-name .sub { font-size: var(--t-xs); color: var(--text-3); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.crow-image { font-family: var(--mono); font-size: var(--t-xs); color: var(--text-2); min-width: 0; }
+.crow-ports { display: flex; gap: 4px; flex-wrap: wrap; }
+.crow-actions { display: flex; gap: 4px; justify-content: flex-end; opacity: 0.55; transition: opacity var(--fast); }
+.crow:hover .crow-actions, .crow-actions:focus-within { opacity: 1; }
+
+.density-compact .crow { padding: 5px 14px; gap: 10px; }
+.density-compact .crow-name .sub { display: none; }
+
+@media (max-width: 1180px) {
+    .crow { grid-template-columns: 18px minmax(0, 2fr) minmax(0, 1.2fr) 104px 96px; }
+    .crow .col-ports, .crow .col-mem { display: none; }
+}
+
+@media (max-width: 760px) {
+    .crow { grid-template-columns: 18px minmax(0, 1fr) 96px; }
+    .crow-image, .crow .col-cpu { display: none; }
+}
+
+/* ------------------------------------------------------------------ projects */
+
+.project-card {
+    display: grid;
+    gap: 12px;
+    padding: 15px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    transition: border-color var(--fast), transform var(--fast);
+}
+
+.project-card:hover { border-color: var(--line-strong); }
+.project-card[data-status="failed"] { border-color: var(--bad-line); }
+.project-card[data-running="1"] { border-color: var(--warn-line); }
+
+.project-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.project-title a { color: var(--text); font-weight: 600; font-size: var(--t-base); }
+.project-title a:hover { color: var(--brand); }
+
+.project-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: var(--t-xs); color: var(--text-3); }
+.project-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 11px; border-top: 1px solid var(--line-soft); }
+
+/* ------------------------------------------------------------------ groups */
+
+.group-card { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+.group-card .head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 15px;
+    border-bottom: 1px solid var(--line);
+    border-left: 3px solid var(--hue, var(--line));
+}
+
+.group-card .head h3 { font-size: var(--t-md); }
+.group-members { display: grid; gap: 6px; padding: 12px 15px; }
+
+.member {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 9px;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    font-size: var(--t-md);
+}
+
+.member .i { color: var(--text-3); }
+.member .tail { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+
+/* ------------------------------------------------------------------ detail */
+
+.detail-hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: 18px 20px;
+    background:
+        linear-gradient(180deg, var(--surface-2), var(--surface)),
+        var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+}
+
+.detail-hero h1 { font-size: var(--t-2xl); letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.detail-hero .sub { color: var(--text-2); font-size: var(--t-md); margin-top: 5px; }
+.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.env-row { display: grid; grid-template-columns: minmax(140px, auto) minmax(0, 1fr); gap: 6px 14px; font-family: var(--mono); font-size: var(--t-sm); }
+.env-row dt { color: var(--text-3); overflow-wrap: anywhere; }
+.env-row dd { margin: 0; overflow-wrap: anywhere; color: var(--text-2); }
+
+.secret {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-3);
+}
+
+.secret button {
+    border: 0;
+    background: transparent;
+    color: var(--brand-text);
+    font: inherit;
+    font-size: var(--t-xs);
+    cursor: pointer;
+    padding: 0;
+}
+
+/* ------------------------------------------------------------------ steps */
+
+.steps { display: grid; gap: 6px; }
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 11px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    font-size: var(--t-sm);
+}
+
+.step .n {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--surface-3);
+    color: var(--text-3);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.step code { background: transparent; border: 0; padding: 0; color: var(--text-2); font-size: var(--t-xs); }
+.step[data-active="1"] { border-color: var(--warn-line); background: var(--warn-soft); }
+.step[data-active="1"] .n { background: var(--warn); color: var(--text-inverse); }
+
+/* ------------------------------------------------------------------ message */
+
+.message-page { display: grid; place-items: center; padding: 8vh 20px; }
+.message-card {
+    width: min(460px, 100%);
+    text-align: center;
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    padding: 34px 28px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-md);
+}
+
+.message-card .glyph {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    background: var(--tone-soft, var(--surface-3));
+    color: var(--tone, var(--text-2));
+}
+
+.message-card.warn { --tone: var(--warn); --tone-soft: var(--warn-soft); }
+.message-card.bad { --tone: var(--bad); --tone-soft: var(--bad-soft); }
+.message-card .body { color: var(--text-2); font-size: var(--t-md); overflow-wrap: anywhere; }

@@ -3,27 +3,37 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><%= title %> · deploy-server</title>
-    <link rel="stylesheet" href="/assets/style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🚀</text></svg>">
+    <meta name="color-scheme" content="dark light">
+    <meta name="robots" content="noindex, nofollow">
+    <title><%= title %> · <%= app.name %></title>
+
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/base.css">
+    <link rel="stylesheet" href="/assets/css/layout.css">
+    <link rel="stylesheet" href="/assets/css/components.css">
+    <link rel="stylesheet" href="/assets/css/pages.css">
+
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+
+    <%# Runs before the first paint so a stored theme never flashes the other one. %>
+    <script src="/assets/js/theme.js"></script>
 </head>
 <body>
-<header class="bar">
-    <a class="brand" href="/ui">deploy<span>-server</span></a>
+<%- include("icons") %>
 
-    <% if (session) { %>
-    <div class="bar-right">
-        <%# Filled in by the client once the event stream connects. %>
-        <span class="live-dot" id="live-dot" title="live updates: connecting" data-state="connecting"></span>
-        <form method="post" action="/ui/logout">
-            <button class="ghost" type="submit">log out</button>
-        </form>
-    </div>
-    <% } %>
-</header>
+<div class="shell" data-collapsed="0">
+    <%- include("sidebar", { nav: nav }) %>
 
-<% if (flash) { %>
-<div class="toast" id="toast"><%= flash %></div>
-<% } %>
+    <div class="main">
+        <%- include("topbar", { title: title, crumbs: typeof crumbs === "undefined" ? null : crumbs }) %>
 
-<main>
+        <div class="toasts" aria-live="polite">
+            <% if (flash) { %>
+            <div class="toast <%= flash.tone %>" data-flash role="status">
+                <svg class="i" aria-hidden="true"><use href="#i-<%= flash.tone === "ok" ? "check-circle" : flash.tone === "bad" ? "alert-circle" : flash.tone === "warn" ? "alert-triangle" : "info" %>"></use></svg>
+                <span><%= flash.text %></span>
+            </div>
+            <% } %>
+        </div>
+
+        <main class="page">

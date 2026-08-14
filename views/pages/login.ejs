@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <meta name="robots" content="noindex, nofollow">
+    <title><%= title %> · <%= app.name %></title>
+
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/base.css">
+    <link rel="stylesheet" href="/assets/css/layout.css">
+    <link rel="stylesheet" href="/assets/css/components.css">
+    <link rel="stylesheet" href="/assets/css/pages.css">
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<%- include("../partials/icons") %>
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <span class="brand-mark"><svg class="i" aria-hidden="true"><use href="#i-cloud"></use></svg></span>
+            <div>
+                <h1><%= app.name %></h1>
+                <p><%= app.tagline %></p>
+            </div>
+        </div>
+
+        <% if (error) { %>
+        <div class="banner bad" role="alert">
+            <svg class="i" aria-hidden="true"><use href="#i-alert-circle"></use></svg>
+            <div><%= error %></div>
+        </div>
+        <% } %>
+
+        <form class="form-grid" method="post" action="/ui/login" style="margin-top:14px">
+            <input type="hidden" name="next" value="<%= next %>">
+
+            <label class="field">
+                Username
+                <input type="text" name="user" value="<%= user %>" autocomplete="username"
+                       autocapitalize="none" spellcheck="false"
+                       <%= user ? "" : "autofocus" %> required placeholder="admin">
+            </label>
+
+            <label class="field">
+                Password
+                <input type="password" name="password" autocomplete="current-password"
+                       <%= user ? "autofocus" : "" %> required placeholder="••••••••••••">
+            </label>
+
+            <button class="btn lg block" type="submit">
+                <svg class="i" aria-hidden="true"><use href="#i-key"></use></svg>
+                Sign in
+            </button>
+        </form>
+
+        <p class="login-foot">
+            <%= app.name %> v<%= app.version %> · sessions last 12 hours
+        </p>
+    </div>
+</div>
+</body>
+</html>

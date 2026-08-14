@@ -1,0 +1,133 @@
+<%- include("../partials/head", {
+    title: title,
+    nav: nav,
+    crumbs: [
+        { label: "Deployments", href: "/ui/deployments" },
+        { label: deployment.project, href: "/ui/projects/" + encodeURIComponent(deployment.project) },
+        { label: "#" + deployment.id },
+    ],
+}) %>
+
+<div class="detail-hero">
+    <div>
+        <h1>
+            Deploy #<%= deployment.id %>
+            <%- include("../partials/status", { status: deployment.status }) %>
+        </h1>
+        <p class="sub">
+            <a href="/ui/projects/<%= encodeURIComponent(deployment.project) %>"><%= deployment.project %></a>
+            · <span class="badge mono plain"><%= deployment.branch %></span>
+            · triggered by <%= deployment.trigger %><%= deployment.actor ? " (" + deployment.actor + ")" : "" %>
+        </p>
+    </div>
+
+    <div class="detail-actions">
+        <a class="btn ghost" href="/ui/deployments/<%= deployment.id %>/raw" target="_blank" rel="noopener">
+            <svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>
+            Raw log
+        </a>
+
+        <% if (deployment.status === "running") { %>
+        <form method="post" action="/ui/projects/<%= encodeURIComponent(deployment.project) %>/cancel">
+            <input type="hidden" name="back" value="/ui/deployments/<%= deployment.id %>">
+            <button class="btn danger" type="submit" data-confirm="Cancel the running deploy?">
+                <svg class="i" aria-hidden="true"><use href="#i-x"></use></svg>
+                Cancel
+            </button>
+        </form>
+        <% } else { %>
+        <form method="post" action="/ui/deployments/<%= deployment.id %>/redeploy">
+            <input type="hidden" name="back" value="/ui/projects/<%= encodeURIComponent(deployment.project) %>">
+            <button class="btn" type="submit" data-confirm="Deploy <%= deployment.branch %> again?">
+                <svg class="i" aria-hidden="true"><use href="#i-rotate"></use></svg>
+                Redeploy
+            </button>
+        </form>
+        <% } %>
+    </div>
+</div>
+
+<% if (deployment.error) { %>
+<div class="banner bad">
+    <svg class="i" aria-hidden="true"><use href="#i-alert-circle"></use></svg>
+    <div>
+        <strong>This run did not finish.</strong>
+        <div class="t-sm" style="margin-top:4px"><%= deployment.error %></div>
+    </div>
+</div>
+<% } %>
+
+<div class="grid-main">
+    <div class="card">
+        <div class="card-head">
+            <h2><svg class="i" aria-hidden="true"><use href="#i-terminal"></use></svg> Log</h2>
+            <div class="log-tools">
+                <% if (deployment.status === "running") { %>
+                <label class="check inline">
+                    <input type="checkbox" id="follow" checked>
+                    <span>follow</span>
+                </label>
+                <% } %>
+                <label class="check inline">
+                    <input type="checkbox" id="log-wrap" checked>
+                    <span>wrap</span>
+                </label>
+            </div>
+        </div>
+        <div class="log-shell">
+            <pre class="log" id="log" tabindex="0"
+                 data-deployment="<%= deployment.id %>"
+                 data-live="<%= deployment.status === "running" ? "1" : "" %>"><%= log || "(no output yet)" %></pre>
+        </div>
+        <% if (deployment.status === "running") { %>
+        <div class="card-foot row tight">
+            <span class="dot pulse" style="color:var(--warn)"></span>
+            Streaming live. New lines appear as the run produces them.
+        </div>
+        <% } %>
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-info"></use></svg> Run</h2></div>
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>Project</dt>
+                    <dd><a href="/ui/projects/<%= encodeURIComponent(deployment.project) %>"><%= deployment.project %></a></dd>
+                    <dt>Branch</dt><dd><code class="t-xs"><%= deployment.branch %></code></dd>
+                    <dt>Commit</dt>
+                    <dd>
+                        <% if (deployment.commit_sha) { %>
+                        <code class="t-xs"><%= fmt.sha(deployment.commit_sha) %></code>
+                        <button class="btn quiet icon sm" type="button" data-copy="<%= deployment.commit_sha %>" title="Copy full sha">
+                            <svg class="i sm" aria-hidden="true"><use href="#i-copy"></use></svg>
+                        </button>
+                        <% } else { %>—<% } %>
+                    </dd>
+                    <dt>Trigger</dt><dd><%= deployment.trigger %></dd>
+                    <dt>Started</dt><dd><%= fmt.stamp(deployment.started_at) %></dd>
+                    <dt>Finished</dt><dd><%= fmt.stamp(deployment.finished_at) %></dd>
+                    <dt>Took</dt><dd><%= fmt.duration(deployment.duration_ms) %></dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-history"></use></svg> Nearby runs</h2></div>
+            <div class="card-body stack tight">
+                <% neighbours.forEach(function (item) { %>
+                <div class="member" <%= item.id === deployment.id ? 'style="border:1px solid var(--brand-line)"' : "" %>>
+                    <a href="/ui/deployments/<%= item.id %>" class="mono t-sm">#<%= item.id %></a>
+                    <span class="t-xs dim"><%= item.branch %></span>
+                    <span class="tail">
+                        <%- include("../partials/status", { status: item.status }) %>
+                        <time class="t-xs dim" datetime="<%= fmt.iso(item.started_at) %>" data-ago><%= fmt.ago(item.started_at) %></time>
+                    </span>
+                </div>
+                <% }) %>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include("../partials/foot") %>
