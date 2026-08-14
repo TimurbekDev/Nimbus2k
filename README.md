@@ -57,6 +57,40 @@ the deploy never reports back. Keep using the SSH workflow in
 `.github/workflows/deploy.yml` for this repository, or disable it with
 `PATCH /repos/deploy-server {"enabled": false}`.
 
+## TLS with nginx and certbot
+
+`docker-compose.yml` also carries an nginx reverse proxy and a certbot
+renewal loop, so the stack terminates TLS itself. nginx owns ports 80 and 443;
+the app container stays published on `127.0.0.1` for local `curl` only.
+
+Before the first start, on the server:
+
+1. Point an A record for `DOMAIN` at the server and open ports 80 and 443.
+2. Set `DOMAIN` and `LETSENCRYPT_EMAIL` in `.env` — `docker compose` refuses to
+   start without `DOMAIN`, including from the deploy workflow.
+3. Run the bootstrap once:
+
+```sh
+./scripts/init-letsencrypt.sh
+```
+
+It writes a throwaway self-signed pair so nginx can boot, requests the real
+certificate over the HTTP-01 challenge, then reloads. Set `CERTBOT_STAGING=1`
+for a dry run against the staging CA first: five failed production attempts per
+hour lock the domain out for the rest of that hour.
+
+From then on the certbot container tries a renewal every 12 hours and nginx
+reloads every 6, so a renewed certificate is picked up without a restart. The
+script is idempotent — rerunning it with a certificate already on the volume
+just starts the stack.
+
+The vhost lives in `nginx/templates/deploy-server.conf.template`; `${DOMAIN}`
+is the only value substituted at container start, so nginx's own `$host` and
+`$remote_addr` survive. Certificates and challenge files sit on the
+`certbot-conf` and `certbot-www` volumes and outlive `up --build`.
+
+Point the GitHub webhook at `https://$DOMAIN/webhook`.
+
 ## Repository registry
 
 A push from an unregistered repository registers itself when

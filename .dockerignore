@@ -5,3 +5,5 @@ data
 .env
 *.log
 README.md
+nginx
+scripts
