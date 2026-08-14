@@ -1,0 +1,55 @@
+services:
+  deploy-server:
+    build: .
+    container_name: deploy-server
+    restart: unless-stopped
+
+    # Published on loopback only. Terminate TLS in a reverse proxy and forward
+    # to this port; never expose it straight to the internet.
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+
+    env_file:
+      - .env
+
+    environment:
+      # Overrides whatever .env says, because inside a container these are the
+      # only values that work.
+      HOST: 0.0.0.0
+      PORT: 3000
+      PROJECTS_DIR: /srv/projects
+      DB_PATH: /data/deploy-server.db
+
+    volumes:
+      # Lets the container drive the host docker daemon. Equivalent to root on
+      # the host, which is why the port stays on loopback and the webhook is
+      # HMAC verified.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Must be the SAME path on both sides. `docker compose up` inside this
+      # container is executed by the host daemon, so relative bind mounts in a
+      # project's compose file resolve against the host filesystem.
+      - /srv/projects:/srv/projects
+
+      # Registry and deploy history survive rebuilds.
+      - deploy-data:/data
+
+      # Deploy keys for private repositories. Drop this line when the
+      # checkouts pull over https with a token.
+      - ${SSH_DIR:-/root/.ssh}:/root/.ssh:ro
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  deploy-data:
