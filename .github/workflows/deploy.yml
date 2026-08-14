@@ -20,6 +20,6 @@ jobs:
             set -e
             cd /srv/projects/deploy-server
             git checkout -- .
-            git pull origin master
+            git pull origin main
             docker compose up -d --build
             docker image prune -f
