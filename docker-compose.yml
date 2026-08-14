@@ -8,7 +8,7 @@ services:
     # Published on loopback only. Terminate TLS in a reverse proxy and forward
     # to this port; never expose it straight to the internet.
     ports:
-      - "127.0.0.1:${PORT:-3000}:3000"
+      - "127.0.0.1:${PORT:-7777}:3000"
 
     env_file:
       - .env
@@ -17,7 +17,7 @@ services:
       # Overrides whatever .env says, because inside a container these are the
       # only values that work.
       HOST: 0.0.0.0
-      PORT: 3000
+      PORT: 7777
       PROJECTS_DIR: /srv/projects
       DB_PATH: /data/nimbus2k.db
 
