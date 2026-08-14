@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/TimurbekDev/deploy-server#readme",
   "dependencies": {
+    "ejs": "^6.0.1",
     "express": "^5.2.1"
   }
 }

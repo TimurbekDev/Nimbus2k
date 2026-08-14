@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= title %> · deploy-server</title>
+    <link rel="stylesheet" href="/assets/style.css">
+    <%# A deploy has no push channel, so the page reloads itself while one runs. %>
+    <% if (typeof refresh !== "undefined" && refresh) { %>
+    <meta http-equiv="refresh" content="5">
+    <% } %>
+</head>
+<body>
+<header class="bar">
+    <a class="brand" href="/ui">deploy-server</a>
+    <% if (typeof session === "undefined" || session) { %>
+    <form method="post" action="/ui/logout">
+        <button class="ghost" type="submit">log out</button>
+    </form>
+    <% } %>
+</header>
+<main>

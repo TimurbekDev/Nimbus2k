@@ -57,6 +57,22 @@ the deploy never reports back. Keep using the SSH workflow in
 `.github/workflows/deploy.yml` for this repository, or disable it with
 `PATCH /repos/deploy-server {"enabled": false}`.
 
+## Web UI
+
+`/ui` serves an EJS dashboard: registered repositories, what is deploying right
+now, the deploy history and the captured log of any single deploy. Each
+repository has a page for triggering a manual deploy and editing its registry
+fields. `/` redirects there.
+
+A browser cannot attach an `Authorization` header to a navigation, so the login
+form trades `ADMIN_TOKEN` for a random session id held in memory and returned
+in an `HttpOnly`, `SameSite=Strict` cookie. Sessions last 12 hours and a
+restart clears them. Login is throttled to 10 attempts per client address per
+15 minutes, and state-changing posts also check the `Origin` header.
+
+The dashboard reloads itself every 5 seconds while a deploy is in flight; a
+deploy log is written when the run finishes, not streamed.
+
 ## TLS through the host nginx
 
 TLS terminates in the nginx already running on the host, which proxies to the
@@ -123,12 +139,14 @@ at a time; pushes arriving mid-deploy collapse into a single follow-up run.
 
 ## API
 
-`GET /healthz` and `POST /webhook` are public. Everything else needs
-`Authorization: Bearer $ADMIN_TOKEN`, and returns 503 until `ADMIN_TOKEN` is set.
+`GET /healthz` and `POST /webhook` are public; `/ui` uses the cookie session
+described above. Everything else needs `Authorization: Bearer $ADMIN_TOKEN`,
+and returns 503 until `ADMIN_TOKEN` is set.
 
 | Route | Purpose |
 |---|---|
 | `GET /healthz` | liveness |
+| `GET /ui` | dashboard, cookie session |
 | `POST /webhook` | GitHub push handler, HMAC verified |
 | `GET /status` | in-flight deploys plus the 10 most recent |
 | `GET /repos` | list registered repositories |

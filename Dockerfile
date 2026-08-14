@@ -13,7 +13,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY config.js db.js deployer.js app.js ./
+COPY config.js db.js deployer.js auth.js ui.js app.js ./
+COPY views ./views
+COPY public ./public
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \

@@ -1,0 +1,39 @@
+<%- include("partials/head", { title: title, refresh: deployment.status === "running" }) %>
+
+<p class="crumb">
+    <a href="/ui">dashboard</a> /
+    <a href="/ui/repos/<%= encodeURIComponent(deployment.repo) %>"><%= deployment.repo %></a> /
+    #<%= deployment.id %>
+</p>
+
+<div class="card">
+    <h1>
+        #<%= deployment.id %>
+        <span class="status <%= deployment.status %>"><%= deployment.status %></span>
+    </h1>
+
+    <dl class="meta">
+        <dt>Repo</dt><dd><%= deployment.repo %></dd>
+        <dt>Branch</dt><dd><code><%= deployment.branch %></code></dd>
+        <dt>Commit</dt><dd><code><%= deployment.commit_sha || "-" %></code></dd>
+        <dt>Trigger</dt><dd><%= deployment.trigger %></dd>
+        <dt>Started</dt><dd><%= fmt.stamp(deployment.started_at) %></dd>
+        <dt>Finished</dt><dd><%= fmt.stamp(deployment.finished_at) %></dd>
+        <dt>Took</dt><dd><%= fmt.duration(deployment.duration_ms) %></dd>
+    </dl>
+
+    <% if (deployment.error) { %>
+    <p class="error"><%= deployment.error %></p>
+    <% } %>
+</div>
+
+<div class="card">
+    <h2>Log</h2>
+    <% if (deployment.status === "running") { %>
+    <p class="muted">The log is written when the deploy finishes; this page
+        refreshes every 5 seconds until then.</p>
+    <% } %>
+    <pre class="log"><%= deployment.log || "(empty)" %></pre>
+</div>
+
+<%- include("partials/foot") %>

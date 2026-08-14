@@ -1,0 +1,79 @@
+<%- include("partials/head", { title: title, refresh: running.length > 0 }) %>
+
+<% if (running.length > 0) { %>
+<div class="card running">
+    <h2>Deploying now</h2>
+    <p><% running.forEach(function (name) { %><span class="tag live"><%= name %></span><% }) %></p>
+    <p class="muted">This page refreshes every 5 seconds while a deploy runs.</p>
+</div>
+<% } %>
+
+<div class="card">
+    <h2>Repositories <span class="count"><%= repos.length %></span></h2>
+
+    <% if (repos.length === 0) { %>
+    <p class="muted">Nothing registered yet. A push from a repository with a
+        checkout under <code>PROJECTS_DIR</code> registers itself.</p>
+    <% } else { %>
+    <table>
+        <thead>
+        <tr><th>Name</th><th>Branch</th><th>Path</th><th>Flags</th><th></th></tr>
+        </thead>
+        <tbody>
+        <% repos.forEach(function (repo) { %>
+        <tr>
+            <td>
+                <a href="/ui/repos/<%= encodeURIComponent(repo.name) %>"><%= repo.name %></a>
+                <% if (!repo.enabled) { %><span class="tag off">disabled</span><% } %>
+                <% if (running.includes(repo.name)) { %><span class="tag live">running</span><% } %>
+            </td>
+            <td><code><%= repo.branch %></code></td>
+            <td class="path"><%= repo.path %></td>
+            <td class="muted">
+                <%= repo.prune_images ? "prune" : "" %>
+                <%= repo.clean_untracked ? "clean" : "" %>
+                <%= repo.compose_file || "" %>
+            </td>
+            <td class="right">
+                <form method="post" action="/ui/repos/<%= encodeURIComponent(repo.name) %>/deploy">
+                    <input type="hidden" name="back" value="/ui">
+                    <button type="submit" <%= repo.enabled ? "" : "disabled" %>>Deploy</button>
+                </form>
+            </td>
+        </tr>
+        <% }) %>
+        </tbody>
+    </table>
+    <% } %>
+</div>
+
+<div class="card">
+    <h2>Recent deploys</h2>
+
+    <% if (recent.length === 0) { %>
+    <p class="muted">No deploys recorded yet.</p>
+    <% } else { %>
+    <table>
+        <thead>
+        <tr><th>#</th><th>Repo</th><th>Branch</th><th>Commit</th><th>Trigger</th>
+            <th>Status</th><th>Started</th><th>Took</th></tr>
+        </thead>
+        <tbody>
+        <% recent.forEach(function (item) { %>
+        <tr>
+            <td><a href="/ui/deployments/<%= item.id %>">#<%= item.id %></a></td>
+            <td><a href="/ui/repos/<%= encodeURIComponent(item.repo) %>"><%= item.repo %></a></td>
+            <td><code><%= item.branch %></code></td>
+            <td><code><%= fmt.sha(item.commit_sha) %></code></td>
+            <td class="muted"><%= item.trigger %></td>
+            <td><span class="status <%= item.status %>"><%= item.status %></span></td>
+            <td title="<%= fmt.stamp(item.started_at) %>"><%= fmt.ago(item.started_at) %></td>
+            <td><%= fmt.duration(item.duration_ms) %></td>
+        </tr>
+        <% }) %>
+        </tbody>
+    </table>
+    <% } %>
+</div>
+
+<%- include("partials/foot") %>

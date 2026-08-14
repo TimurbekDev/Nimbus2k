@@ -3,17 +3,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const express = require("express");
 
-const { PORT, HOST, PROJECTS_DIR, SECRET, ADMIN_TOKEN, AUTO_REGISTER } = require("./config");
+const { PORT, HOST, PROJECTS_DIR, SECRET, AUTO_REGISTER } = require("./config");
 const { repos, deployments } = require("./db");
 const { schedule, running } = require("./deployer");
+const { equals, requireAdmin } = require("./auth");
+const ui = require("./ui");
 
 const REPO_NAME = /^[A-Za-z0-9._-]+$/;
-
-const equals = (a, b) => {
-    const left = Buffer.from(a);
-    const right = Buffer.from(b);
-    return left.length === right.length && crypto.timingSafeEqual(left, right);
-};
 
 function verifySignature(req) {
     const header = req.get("X-Hub-Signature-256");
@@ -25,29 +21,27 @@ function verifySignature(req) {
     return equals(header, expected);
 }
 
-// Admin routes expose repository paths and deploy logs, so they stay closed
-// until ADMIN_TOKEN is configured.
-function requireAdmin(req, res, next) {
-    if (!ADMIN_TOKEN) return res.status(503).json({ error: "ADMIN_TOKEN is not configured" });
-
-    const header = req.get("Authorization") || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-
-    if (!token || !equals(token, ADMIN_TOKEN)) {
-        return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    next();
-}
-
 const app = express();
+
+// One reverse proxy sits in front, so req.ip and req.secure should follow its
+// X-Forwarded-* headers rather than describing the loopback hop.
+app.set("trust proxy", 1);
+
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
 
 app.use(express.json({
     limit: "1mb",
     verify: (req, res, buf) => { req.rawBody = buf; },
 }));
 
+// Stylesheet only, and the login page needs it before there is a session.
+app.use("/assets", express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
+
 app.get("/healthz", (req, res) => res.json({ ok: true }));
+
+app.get("/", (req, res) => res.redirect("/ui"));
+app.use("/ui", ui);
 
 // ---------------------------------------------------------------- webhook
 
