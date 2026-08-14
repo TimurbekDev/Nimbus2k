@@ -1,0 +1,57 @@
+# Rendered by the nginx image entrypoint: ${DOMAIN} is substituted from the
+# environment, every other $variable is left alone by NGINX_ENVSUBST_FILTER.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+
+    # Certbot writes its challenge files here; this must stay plain HTTP,
+    # including during renewals.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # The webhook payload cap in app.js is 1mb; anything larger is rejected
+    # here instead of travelling to the app.
+    client_max_body_size 1m;
+
+    access_log /var/log/nginx/deploy-server.access.log;
+    error_log  /var/log/nginx/deploy-server.error.log;
+
+    location / {
+        proxy_pass http://deploy-server:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # A deploy is scheduled, not awaited, so responses are fast; the
+        # timeout only has to cover the app being busy.
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+    }
+}
