@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TimurbekDev/nimbus2k.git"
+    "url": "git+https://github.com/TimurbekDev/Nimbus2k.git"
   },
   "keywords": [
     "deploy",
@@ -26,9 +26,9 @@
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/TimurbekDev/nimbus2k/issues"
+    "url": "https://github.com/TimurbekDev/Nimbus2k/issues"
   },
-  "homepage": "https://github.com/TimurbekDev/nimbus2k#readme",
+  "homepage": "https://github.com/TimurbekDev/Nimbus2k#readme",
   "dependencies": {
     "dotenv": "^17.4.2",
     "ejs": "^6.0.1",
