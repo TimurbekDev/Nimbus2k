@@ -1,4 +1,4 @@
-<%- include("partials/head", { title: "Log in", session: false }) %>
+<%- include("partials/head", { title: title }) %>
 
 <form class="card login" method="post" action="/ui/login">
     <h1>Log in</h1>
@@ -8,7 +8,7 @@
     <p class="error"><%= error %></p>
     <% } %>
 
-    <input type="password" name="token" autocomplete="off" autofocus
+    <input type="password" name="token" autocomplete="current-password" autofocus
            placeholder="admin token" <%= configured ? "" : "disabled" %>>
 
     <button type="submit" <%= configured ? "" : "disabled" %>>Log in</button>

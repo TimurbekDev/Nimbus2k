@@ -62,6 +62,20 @@ const repos = {
         return db.prepare("SELECT * FROM repos ORDER BY name").all().map(toRepo);
     },
 
+    // The dashboard shows how each repository last fared, which is one query
+    // rather than one per row.
+    listWithLast() {
+        return db.prepare(`
+            SELECT r.*,
+                   d.id AS last_id, d.status AS last_status,
+                   d.started_at AS last_started_at, d.duration_ms AS last_duration_ms
+            FROM repos r
+            LEFT JOIN deployments d
+                   ON d.id = (SELECT MAX(id) FROM deployments WHERE repo_id = r.id)
+            ORDER BY r.name
+        `).all().map(toRepo);
+    },
+
     create({ name, branch, path: repoPath, compose_file = null, prune_images = true, clean_untracked = false }) {
         db.prepare(`
             INSERT INTO repos (name, branch, path, compose_file, prune_images, clean_untracked)
@@ -142,6 +156,29 @@ const deployments = {
             JOIN repos r ON r.id = d.repo_id
             WHERE d.id = ?
         `).get(id);
+    },
+
+    // History is capped per repository, so these numbers describe the retained
+    // window rather than all time. Good enough for "is this thing healthy".
+    stats() {
+        const counts = db.prepare(`
+            SELECT status, COUNT(*) AS n FROM deployments GROUP BY status
+        `).all();
+
+        const total = counts.reduce((sum, row) => sum + row.n, 0);
+        const byStatus = Object.fromEntries(counts.map((row) => [row.status, row.n]));
+        const average = db.prepare(`
+            SELECT AVG(duration_ms) AS ms FROM deployments WHERE status = 'success'
+        `).get();
+
+        return {
+            total,
+            success: byStatus.success || 0,
+            failed: byStatus.failed || 0,
+            cancelled: byStatus.cancelled || 0,
+            running: byStatus.running || 0,
+            averageMs: average.ms === null ? null : Math.round(average.ms),
+        };
     },
 };
 

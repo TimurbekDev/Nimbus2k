@@ -16,7 +16,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY config.js db.js deployer.js auth.js ui.js app.js ./
+COPY server.js ./
+COPY src ./src
 COPY views ./views
 COPY public ./public
 
@@ -26,4 +27,4 @@ ENV NODE_ENV=production \
 
 EXPOSE 3000
 
-CMD ["node", "--no-warnings=ExperimentalWarning", "app.js"]
+CMD ["node", "--no-warnings=ExperimentalWarning", "server.js"]

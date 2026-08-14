@@ -5,18 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><%= title %> · deploy-server</title>
     <link rel="stylesheet" href="/assets/style.css">
-    <%# A deploy has no push channel, so the page reloads itself while one runs. %>
-    <% if (typeof refresh !== "undefined" && refresh) { %>
-    <meta http-equiv="refresh" content="5">
-    <% } %>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🚀</text></svg>">
 </head>
 <body>
 <header class="bar">
-    <a class="brand" href="/ui">deploy-server</a>
-    <% if (typeof session === "undefined" || session) { %>
-    <form method="post" action="/ui/logout">
-        <button class="ghost" type="submit">log out</button>
-    </form>
+    <a class="brand" href="/ui">deploy<span>-server</span></a>
+
+    <% if (session) { %>
+    <div class="bar-right">
+        <%# Filled in by the client once the event stream connects. %>
+        <span class="live-dot" id="live-dot" title="live updates: connecting" data-state="connecting"></span>
+        <form method="post" action="/ui/logout">
+            <button class="ghost" type="submit">log out</button>
+        </form>
+    </div>
     <% } %>
 </header>
+
+<% if (flash) { %>
+<div class="toast" id="toast"><%= flash %></div>
+<% } %>
+
 <main>

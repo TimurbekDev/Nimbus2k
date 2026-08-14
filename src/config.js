@@ -7,9 +7,9 @@ const config = {
     PORT: Number(process.env.PORT || 3000),
     HOST: process.env.HOST || "127.0.0.1",
     PROJECTS_DIR: process.env.PROJECTS_DIR || "/srv/projects",
-    SECRET: process.env.GITHUB_WEBHOOK_SECRET || "",
-    ADMIN_TOKEN: process.env.ADMIN_TOKEN || "",
-    DB_PATH: process.env.DB_PATH || path.join(__dirname, "data", "deploy-server.db"),
+    SECRET: process.env.GITHUB_WEBHOOK_SECRET || "asdasdas",
+    ADMIN_TOKEN: process.env.ADMIN_TOKEN || "12345wrwgfdsgfs",
+    DB_PATH: process.env.DB_PATH || path.join(__dirname, "..", "data", "deploy-server.db"),
     STEP_TIMEOUT_MS: Number(process.env.STEP_TIMEOUT_MS || 15 * 60 * 1000),
     // Unknown repository pushing for the first time gets a row automatically,
     // as long as a git checkout already exists under PROJECTS_DIR.

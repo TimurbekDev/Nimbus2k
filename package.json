@@ -2,9 +2,9 @@
   "name": "deploy-server",
   "version": "1.0.0",
   "description": "GitHub webhook listener that redeploys docker compose projects on push",
-  "main": "app.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node --no-warnings=ExperimentalWarning app.js"
+    "start": "node --no-warnings=ExperimentalWarning server.js"
   },
   "engines": {
     "node": ">=22.5.0"

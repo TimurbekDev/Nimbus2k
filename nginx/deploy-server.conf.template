@@ -42,6 +42,22 @@ server {
     access_log /var/log/nginx/deploy-server.access.log;
     error_log  /var/log/nginx/deploy-server.error.log;
 
+    # The dashboard's event stream. Buffering would hold each deploy log line
+    # back until the response ended, and the default read timeout would drop a
+    # connection that is deliberately long-lived.
+    location = /ui/events {
+        proxy_pass http://127.0.0.1:__PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:__PORT__;
         proxy_http_version 1.1;

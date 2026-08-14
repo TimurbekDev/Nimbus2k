@@ -10,6 +10,28 @@ a SQLite file (`node:sqlite`, no native dependency).
 
 Node >= 22.5 (`node:sqlite`), git and docker compose on the host.
 
+## Layout
+
+```
+server.js            binds the port; everything else is wiring
+src/
+  app.js             express setup and route mounting
+  config.js          environment, validated once at boot
+  db.js              sqlite schema and every query
+  deployer.js        the deploy loop, its event bus and cancellation
+  auth.js            token compare, UI sessions, login throttle
+  format.js          time and duration helpers shared by the views
+  validate.js        the name patterns that guard filesystem paths
+  routes/
+    webhook.js       POST /webhook, HMAC verified
+    api.js           the token-authenticated JSON API
+    ui.js            the dashboard, its forms and the event stream
+views/               EJS templates
+public/              stylesheet and the client script
+nginx/               vhost templates for the host nginx
+scripts/             one-shot server setup
+```
+
 ## Setup
 
 ```sh
@@ -59,10 +81,19 @@ the deploy never reports back. Keep using the SSH workflow in
 
 ## Web UI
 
-`/ui` serves an EJS dashboard: registered repositories, what is deploying right
-now, the deploy history and the captured log of any single deploy. Each
-repository has a page for triggering a manual deploy and editing its registry
-fields. `/` redirects there.
+`/ui` serves an EJS dashboard: success rate and average duration, what is
+deploying right now, every registered repository with the outcome of its last
+run, and the log of any single deploy. Each repository has a page for manual
+deploys, cancellation and its registry fields. `/` redirects there.
+
+| | |
+|---|---|
+| live updates | `GET /ui/events` is a server-sent event stream. Log lines appear as they are written, and a run starting or ending refreshes the open page. No polling, no manual reload. |
+| cancel | Stops the running step and records the deploy as `cancelled`. |
+| redeploy | Runs the same branch again from any row in the history. |
+| filter | Type in the repository filter, or press `/` from anywhere on the dashboard. |
+| raw log | `GET /ui/deployments/:id/raw` is the plain text, for piping into anything else. |
+| register by hand | For a checkout outside `PROJECTS_DIR`, or when `AUTO_REGISTER` is off. |
 
 A browser cannot attach an `Authorization` header to a navigation, so the login
 form trades `ADMIN_TOKEN` for a random session id held in memory and returned
@@ -70,8 +101,17 @@ in an `HttpOnly`, `SameSite=Strict` cookie. Sessions last 12 hours and a
 restart clears them. Login is throttled to 10 attempts per client address per
 15 minutes, and state-changing posts also check the `Origin` header.
 
-The dashboard reloads itself every 5 seconds while a deploy is in flight; a
-deploy log is written when the run finishes, not streamed.
+The log of a running deploy lives in the deployer's buffer and reaches the
+database only when the run ends, so a tab opened halfway through is served the
+buffer and then follows the stream.
+
+Cancelling kills the step's whole process group. `git` shells out to `ssh` and
+`docker compose` to buildkit; killing only the direct child leaves the
+grandchild holding the pipes open, and the step hangs instead of stopping.
+
+The client script has no build step and no dependencies. Without JavaScript
+every page still renders and every form still works — only the live updates are
+lost.
 
 ## TLS through the host nginx
 
@@ -104,6 +144,10 @@ The vhost source is `nginx/deploy-server.conf.template`, with `__DOMAIN__` and
 never symlinked: the deploy workflow runs `git checkout -- .`, which would
 revert anything written back into the checkout. Editing the template therefore
 means rerunning the script.
+
+The vhost gives `/ui/events` its own `location` with `proxy_buffering off` and
+a one-hour read timeout. Without it nginx would hold every log line until the
+deploy ended and then drop the stream after a minute of quiet.
 
 Point the GitHub webhook at `https://$DOMAIN/webhook`.
 
@@ -147,6 +191,7 @@ and returns 503 until `ADMIN_TOKEN` is set.
 |---|---|
 | `GET /healthz` | liveness |
 | `GET /ui` | dashboard, cookie session |
+| `GET /ui/events` | server-sent deploy events, cookie session |
 | `POST /webhook` | GitHub push handler, HMAC verified |
 | `GET /status` | in-flight deploys plus the 10 most recent |
 | `GET /repos` | list registered repositories |
@@ -154,6 +199,7 @@ and returns 503 until `ADMIN_TOKEN` is set.
 | `PATCH /repos/:name` | update any registry field |
 | `DELETE /repos/:name` | unregister, dropping its history |
 | `POST /repos/:name/deploy` | trigger manually: `{ branch? }` |
+| `POST /repos/:name/cancel` | kill the running deploy, 409 when nothing runs |
 | `GET /deployments?repo=&limit=` | history without logs |
 | `GET /deployments/:id` | one deploy including its captured log |
 

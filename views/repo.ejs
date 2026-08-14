@@ -1,53 +1,69 @@
-<%- include("partials/head", { title: title, refresh: running }) %>
+<%- include("partials/head", { title: title }) %>
 
 <p class="crumb"><a href="/ui">dashboard</a> / <%= repo.name %></p>
 
 <div class="card">
-    <h1>
-        <%= repo.name %>
-        <% if (!repo.enabled) { %><span class="tag off">disabled</span><% } %>
-        <% if (running) { %><span class="tag live">running</span><% } %>
-    </h1>
+    <div class="card-head">
+        <h1>
+            <%= repo.name %>
+            <% if (!repo.enabled) { %><span class="tag off">disabled</span><% } %>
+            <% if (active) { %><span class="tag live"><span class="pulse"></span>running</span><% } %>
+        </h1>
 
+        <% if (active) { %>
+        <a class="button-link" href="/ui/deployments/<%= active.id %>">watch log →</a>
+        <% } %>
+    </div>
+
+    <% if (active) { %>
+    <form class="row" method="post" action="/ui/repos/<%= encodeURIComponent(repo.name) %>/cancel">
+        <input type="hidden" name="back" value="/ui/repos/<%= encodeURIComponent(repo.name) %>">
+        <button class="danger" type="submit" data-confirm="Cancel the running deploy?">Cancel deploy</button>
+        <span class="muted">Kills the current step; the run is recorded as cancelled.</span>
+    </form>
+    <% } else { %>
     <form class="row" method="post" action="/ui/repos/<%= encodeURIComponent(repo.name) %>/deploy">
         <input type="hidden" name="back" value="/ui/repos/<%= encodeURIComponent(repo.name) %>">
         <input type="text" name="branch" placeholder="<%= repo.branch %>" autocomplete="off">
         <button type="submit" <%= repo.enabled ? "" : "disabled" %>>Deploy now</button>
+        <span class="muted">Empty deploys <code><%= repo.branch %></code>.</span>
     </form>
-    <p class="muted">Leave the branch empty to deploy <code><%= repo.branch %></code>.</p>
+    <% } %>
+
+    <p class="muted mono-path">Checkout: <code><%= repo.path %></code></p>
 </div>
 
 <div class="card">
     <h2>Settings</h2>
 
-    <form method="post" action="/ui/repos/<%= encodeURIComponent(repo.name) %>/settings">
+    <form class="grid" method="post" action="/ui/repos/<%= encodeURIComponent(repo.name) %>/settings">
         <label>Branch
             <input type="text" name="branch" value="<%= repo.branch %>" autocomplete="off">
+            <span class="hint">Only pushes to this branch deploy.</span>
         </label>
 
-        <label>Compose file <span class="muted">passed as <code>-f</code>, empty for the default</span>
+        <label>Compose file
             <input type="text" name="compose_file" value="<%= repo.compose_file || "" %>" autocomplete="off">
+            <span class="hint">Passed as <code>-f</code>, relative to the checkout. Empty uses the default.</span>
         </label>
 
         <label class="check">
             <input type="checkbox" name="enabled" <%= repo.enabled ? "checked" : "" %>>
-            enabled <span class="muted">unticked ignores pushes without dropping history</span>
+            <span>enabled <span class="hint">unticked ignores pushes without dropping history</span></span>
         </label>
 
         <label class="check">
             <input type="checkbox" name="prune_images" <%= repo.prune_images ? "checked" : "" %>>
-            prune images <span class="muted">runs <code>docker image prune -f</code> after the build</span>
+            <span>prune images <span class="hint">runs <code>docker image prune -f</code> after the build</span></span>
         </label>
 
         <label class="check">
             <input type="checkbox" name="clean_untracked" <%= repo.clean_untracked ? "checked" : "" %>>
-            clean untracked <span class="muted">runs <code>git clean -fd</code>; deletes a repo-local <code>.env</code></span>
+            <span>clean untracked <span class="hint">runs <code>git clean -fd</code>; deletes a repo-local <code>.env</code></span></span>
         </label>
 
         <button type="submit">Save</button>
     </form>
-
-    <p class="muted">Checkout: <code><%= repo.path %></code></p>
 </div>
 
 <div class="card">
@@ -59,7 +75,7 @@
     <table>
         <thead>
         <tr><th>#</th><th>Branch</th><th>Commit</th><th>Trigger</th>
-            <th>Status</th><th>Started</th><th>Took</th></tr>
+            <th>Status</th><th>Started</th><th>Took</th><th></th></tr>
         </thead>
         <tbody>
         <% history.forEach(function (item) { %>
@@ -69,8 +85,16 @@
             <td><code><%= fmt.sha(item.commit_sha) %></code></td>
             <td class="muted"><%= item.trigger %></td>
             <td><span class="status <%= item.status %>"><%= item.status %></span></td>
-            <td title="<%= fmt.stamp(item.started_at) %>"><%= fmt.ago(item.started_at) %></td>
+            <td><time datetime="<%= fmt.iso(item.started_at) %>" data-ago title="<%= fmt.stamp(item.started_at) %>"><%= fmt.ago(item.started_at) %></time></td>
             <td><%= fmt.duration(item.duration_ms) %></td>
+            <td class="right">
+                <% if (!active && item.status !== "running") { %>
+                <form method="post" action="/ui/deployments/<%= item.id %>/redeploy">
+                    <button class="ghost small" type="submit"
+                            data-confirm="Deploy <%= item.branch %> again?">redeploy</button>
+                </form>
+                <% } %>
+            </td>
         </tr>
         <% }) %>
         </tbody>
