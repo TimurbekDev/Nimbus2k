@@ -1,13 +1,13 @@
-# Rendered by the nginx image entrypoint: ${DOMAIN} is substituted from the
-# environment, every other $variable is left alone by NGINX_ENVSUBST_FILTER.
+# Installed into the host nginx by scripts/setup-nginx-tls.sh, which fills in
+# __DOMAIN__ and __PORT__. Do not symlink this file into /etc/nginx: the deploy
+# workflow runs `git checkout -- .`, so anything written back here is lost.
 
 server {
     listen 80;
     listen [::]:80;
-    server_name ${DOMAIN};
+    server_name __DOMAIN__;
 
-    # Certbot writes its challenge files here; this must stay plain HTTP,
-    # including during renewals.
+    # Renewals re-use this path, so it has to stay reachable over plain HTTP.
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
@@ -18,13 +18,14 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
-    server_name ${DOMAIN};
+    # The `http2 on;` directive only exists from 1.25.1; this form works from
+    # 1.9.5 onwards and merely logs a deprecation notice on newer builds.
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name __DOMAIN__;
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
@@ -42,7 +43,7 @@ server {
     error_log  /var/log/nginx/deploy-server.error.log;
 
     location / {
-        proxy_pass http://deploy-server:3000;
+        proxy_pass http://127.0.0.1:__PORT__;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

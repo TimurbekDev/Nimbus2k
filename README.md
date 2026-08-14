@@ -57,37 +57,37 @@ the deploy never reports back. Keep using the SSH workflow in
 `.github/workflows/deploy.yml` for this repository, or disable it with
 `PATCH /repos/deploy-server {"enabled": false}`.
 
-## TLS with nginx and certbot
+## TLS through the host nginx
 
-`docker-compose.yml` also carries an nginx reverse proxy and a certbot
-renewal loop, so the stack terminates TLS itself. nginx owns ports 80 and 443;
-the app container stays published on `127.0.0.1` for local `curl` only.
+TLS terminates in the nginx already running on the host, which proxies to the
+container on `127.0.0.1:$PORT`. Nothing in `docker-compose.yml` binds 80 or
+443, so the other sites that nginx serves are untouched.
 
-Before the first start, on the server:
+On the server:
 
 1. Point an A record for `DOMAIN` at the server and open ports 80 and 443.
-2. Set `DOMAIN` and `LETSENCRYPT_EMAIL` in `.env` — `docker compose` refuses to
-   start without `DOMAIN`, including from the deploy workflow.
-3. Run the bootstrap once:
+2. Set `DOMAIN` and `LETSENCRYPT_EMAIL` in `.env`.
+3. Run the setup once:
 
 ```sh
-./scripts/init-letsencrypt.sh
+sudo ./scripts/setup-nginx-tls.sh
 ```
 
-It writes a throwaway self-signed pair so nginx can boot, requests the real
-certificate over the HTTP-01 challenge, then reloads. Set `CERTBOT_STAGING=1`
-for a dry run against the staging CA first: five failed production attempts per
-hour lock the domain out for the rest of that hour.
+It installs a challenge-only vhost, requests the certificate over HTTP-01,
+then swaps in the TLS vhost — nginx refuses to start while `ssl_certificate`
+points at a file that does not exist yet, which is why it takes two passes.
+Set `CERTBOT_STAGING=1` for a dry run against the staging CA first: five failed
+production attempts per hour lock the domain out for the rest of that hour.
 
-From then on the certbot container tries a renewal every 12 hours and nginx
-reloads every 6, so a renewed certificate is picked up without a restart. The
-script is idempotent — rerunning it with a certificate already on the volume
-just starts the stack.
+Renewals come from the host's own `certbot.timer`. The script drops
+`/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` so a renewed
+certificate is reloaded without manual work.
 
-The vhost lives in `nginx/templates/deploy-server.conf.template`; `${DOMAIN}`
-is the only value substituted at container start, so nginx's own `$host` and
-`$remote_addr` survive. Certificates and challenge files sit on the
-`certbot-conf` and `certbot-www` volumes and outlive `up --build`.
+The vhost source is `nginx/deploy-server.conf.template`, with `__DOMAIN__` and
+`__PORT__` substituted at install time. It is **copied** into `/etc/nginx`,
+never symlinked: the deploy workflow runs `git checkout -- .`, which would
+revert anything written back into the checkout. Editing the template therefore
+means rerunning the script.
 
 Point the GitHub webhook at `https://$DOMAIN/webhook`.
 
