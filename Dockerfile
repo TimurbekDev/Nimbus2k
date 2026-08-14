@@ -2,7 +2,10 @@ FROM node:24-alpine
 
 # The server shells out to git and docker compose, so both CLIs ship in the
 # image. The docker daemon itself comes from the mounted host socket.
-RUN apk add --no-cache git docker-cli docker-cli-compose
+# openssh-client is not optional: alpine leaves it out, and a checkout with an
+# `git@github.com:` remote fails with "cannot run ssh: No such file or
+# directory" the moment it tries to fetch.
+RUN apk add --no-cache git openssh-client docker-cli docker-cli-compose
 
 # Checkouts are owned by the host user, not by root inside the container, and
 # git refuses to touch them without this.
