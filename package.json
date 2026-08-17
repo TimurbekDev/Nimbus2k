@@ -5,8 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning src/index.js",
-    "dev": "node --no-warnings=ExperimentalWarning --watch src/index.js",
-    "hash-password": "node src/tools/hash-password.js"
+    "dev": "node --no-warnings=ExperimentalWarning --watch src/index.js"
   },
   "engines": {
     "node": ">=22.5.0"

@@ -43,26 +43,22 @@ const config = {
     PORT: num("PORT", 3000),
     TRUST_PROXY: num("TRUST_PROXY", 1),
 
-    // --------------------------------------------------------------- secrets
-    SECRET: str("GITHUB_WEBHOOK_SECRET"),
+    // --------------------------------------------------------------- storage
+    ROOT,
+    PROJECTS_DIR: str("PROJECTS_DIR", "/srv/projects"),
+    DB_PATH: str("DB_PATH", path.join(ROOT, "data", "nimbus2k.db")),
 
-    // Operators sign in with a name and a password. The password may be given
-    // in the clear, or as a scrypt digest so a leaked .env does not hand over a
-    // credential a human has probably reused somewhere else.
+    // --------------------------------------------------------------- secrets
+    // Operators sign in with a name and a password. Only the digest is ever
+    // held: a plaintext ADMIN_PASSWORD is hashed on the first boot that sees
+    // it, after which the line can be deleted from .env.
     ADMIN_USER: str("ADMIN_USER", "admin"),
-    ADMIN_PASSWORD: str("ADMIN_PASSWORD"),
-    ADMIN_PASSWORD_HASH: str("ADMIN_PASSWORD_HASH"),
 
     // Machines use a bearer token instead of the login form. Optional: without
     // one the API still accepts the same name and password over HTTP Basic.
     ADMIN_TOKEN: str("ADMIN_TOKEN"),
 
     SESSION_TTL_MS: num("SESSION_TTL_MS", 12 * 60 * 60 * 1000),
-
-    // --------------------------------------------------------------- storage
-    ROOT,
-    PROJECTS_DIR: str("PROJECTS_DIR", "/srv/projects"),
-    DB_PATH: str("DB_PATH", path.join(ROOT, "data", "nimbus2k.db")),
 
     // --------------------------------------------------------------- deploys
     STEP_TIMEOUT_MS: num("STEP_TIMEOUT_MS", 15 * 60 * 1000),
@@ -92,19 +88,18 @@ const config = {
 
 config.IS_PROD = config.NODE_ENV === "production";
 
+// ------------------------------------------------------------------ checks
+
+// Only what an operator can get wrong. Everything else has a default, and the
+// two credentials are generated when they are missing rather than refused.
 const problems = [];
 
-if (!config.SECRET) problems.push("GITHUB_WEBHOOK_SECRET is required");
+if (!config.ADMIN_USER) problems.push("ADMIN_USER cannot be empty");
 
-if (!config.ADMIN_USER) problems.push("ADMIN_USER is required");
-
-if (!config.ADMIN_PASSWORD && !config.ADMIN_PASSWORD_HASH) {
-    problems.push("ADMIN_PASSWORD (or ADMIN_PASSWORD_HASH) is required");
-}
-
-// Only the plaintext form can be measured; a digest says nothing about the
-// password behind it.
-if (config.ADMIN_PASSWORD && !config.ADMIN_PASSWORD_HASH && config.ADMIN_PASSWORD.length < 12) {
+// A digest says nothing about the password behind it, so only the plaintext
+// form can be measured.
+const plaintext = str("ADMIN_PASSWORD");
+if (plaintext && !str("ADMIN_PASSWORD_HASH") && plaintext.length < 12) {
     problems.push("ADMIN_PASSWORD must be at least 12 characters");
 }
 
@@ -115,8 +110,23 @@ if (config.ADMIN_TOKEN && config.ADMIN_TOKEN.length < 16) {
 if (problems.length > 0) {
     console.error(`${config.APP_NAME} cannot start:`);
     for (const problem of problems) console.error(`  - ${problem}`);
-    console.error("\nCopy .env.example to .env and fill it in.");
+    console.error("\nEverything in .env is optional; fix or remove the value above.");
     process.exit(1);
 }
+
+// ------------------------------------------------------------------ secrets
+
+// Generates and persists whatever the environment did not supply. Runs before
+// anything else opens the data directory, and is the only place that ever sees
+// a plaintext password.
+const bootstrap = require("./bootstrap").resolve({
+    dataDir: path.dirname(config.DB_PATH),
+});
+
+config.SECRET = bootstrap.webhookSecret;
+config.ADMIN_PASSWORD_HASH = bootstrap.adminPasswordHash;
+config.SECRET_GENERATED = Boolean(bootstrap.generated.webhookSecret);
+config.PASSWORD_FROM_ENV = bootstrap.hashedFromEnv;
+config.BOOTSTRAP = bootstrap;
 
 module.exports = config;

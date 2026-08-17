@@ -10,8 +10,11 @@ services:
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
 
+    # Optional: Nimbus2k generates what it needs on the first run, so a fresh
+    # clone has no .env at all. Needs Compose v2.24 or newer for `required`.
     env_file:
-      - .env
+      - path: .env
+        required: false
 
     environment:
       # Overrides whatever .env says, because inside a container these are the

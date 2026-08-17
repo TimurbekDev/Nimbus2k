@@ -527,6 +527,9 @@
                     current.replaceWith(next);
                     window.scrollTo(0, scroll);
                     init();
+
+                    // The DOM now reflects whatever the last pulse reported.
+                    pulseApplied = pulseSeen;
                 })
                 .catch(function () { /* a failed refresh is not worth reporting */ })
                 .finally(function () { refreshing = false; });
@@ -586,14 +589,56 @@
         };
     }
 
-    // The fleet page reflects a daemon that changes without telling anyone, so
-    // it polls on top of the event stream.
+    // The daemon changes without telling anyone, so the page has to check. It
+    // asks for a fingerprint rather than the page itself: re-fetching 20 kB of
+    // HTML on a timer, parsing it and swapping the DOM in cost far more than
+    // the one thing worth knowing, which is whether anything changed at all.
+    // `seen` is the newest fingerprint the server reported; `applied` is the one
+    // the DOM actually reflects. They only differ while a refresh is pending or
+    // was skipped - a refresh is skipped mid-edit, and keeping the two apart is
+    // what makes the next tick pick it up instead of dropping the change.
+    var pulseSeen = null;
+    var pulseApplied = null;
+    var pulseTimer = null;
+
+    function checkPulse() {
+        if (document.hidden) return;
+
+        fetch("/ui/pulse", { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(function (response) { return response.ok ? response.json() : null; })
+            .then(function (data) {
+                if (!data) return;
+
+                pulseSeen = data.v;
+                if (pulseApplied === null) pulseApplied = data.v;
+                else if (pulseSeen !== pulseApplied) refresh();
+            })
+            .catch(function () { /* offline; the next tick tries again */ });
+    }
+
+    function initPulse() {
+        if (pulseTimer || !$(".shell")) return;
+
+        checkPulse();
+        pulseTimer = setInterval(checkPulse, 5000);
+
+        // Coming back to a tab that was hidden for a while should not wait out
+        // the interval.
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) checkPulse();
+        });
+    }
+
+    // The fleet page also shows live CPU and memory, which no fingerprint can
+    // usefully track - a meter that moves by a tenth of a percent is not a
+    // change worth re-rendering for. Those pages ask for a slow full refresh on
+    // top of the pulse.
     function initAutoRefresh() {
         var host = $("[data-refresh]");
         if (!host || host.dataset.bound) return;
         host.dataset.bound = "1";
 
-        var seconds = Number(host.getAttribute("data-refresh")) || 10;
+        var seconds = Number(host.getAttribute("data-refresh")) || 20;
         setInterval(function () { if (!document.hidden) refresh(); }, seconds * 1000);
     }
 
@@ -616,6 +661,7 @@
     init();
     initFlash();
     connect();
+    initPulse();
 
     setInterval(tickTimes, 10000);
 

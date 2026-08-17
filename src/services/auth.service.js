@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 
 const {
-    ADMIN_TOKEN, ADMIN_USER, ADMIN_PASSWORD, ADMIN_PASSWORD_HASH, SESSION_TTL_MS,
+    ADMIN_TOKEN, ADMIN_USER, ADMIN_PASSWORD_HASH, SESSION_TTL_MS,
 } = require("../config");
 const password = require("../lib/password");
 
@@ -21,13 +21,13 @@ const validToken = (token) => Boolean(ADMIN_TOKEN) && Boolean(token) && equals(t
  * The one place a sign-in is decided. Both fields are always checked, even when
  * the name is already wrong, so a wrong name and a wrong password cost the same
  * amount of work.
+ *
+ * Only ever compares against a digest: a password given in the clear was turned
+ * into one at boot.
  */
 function verifyCredentials(user, secret) {
     const nameOk = password.sameSecret(user, ADMIN_USER);
-
-    const secretOk = ADMIN_PASSWORD_HASH
-        ? password.verify(secret, ADMIN_PASSWORD_HASH)
-        : Boolean(ADMIN_PASSWORD) && password.sameSecret(secret, ADMIN_PASSWORD);
+    const secretOk = password.verify(secret, ADMIN_PASSWORD_HASH);
 
     return nameOk && secretOk;
 }

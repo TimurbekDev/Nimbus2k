@@ -184,6 +184,33 @@
         <% } %>
 
         <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-key"></use></svg> Webhook secret</h2>
+                <% if (webhook.generated) { %><span class="badge brand">generated</span><% } %>
+            </div>
+            <div class="card-body stack tight">
+                <p class="t-sm muted">
+                    Paste this into the repository's webhook settings, with content type
+                    <code>application/json</code>. Every delivery is verified against it.
+                </p>
+                <div class="row tight">
+                    <code class="t-xs">••••••••••••••••</code>
+                    <button type="button" class="btn quiet sm" data-secret="<%= webhook.secret %>" data-shown="0">reveal</button>
+                    <button type="button" class="btn quiet sm" data-copy="<%= webhook.secret %>">
+                        <svg class="i sm" aria-hidden="true"><use href="#i-copy"></use></svg>
+                        Copy
+                    </button>
+                </div>
+                <% if (webhook.generated) { %>
+                <p class="t-xs dim">
+                    Generated on first run because <code>GITHUB_WEBHOOK_SECRET</code> was not set.
+                    Set that variable to use your own.
+                </p>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-zap"></use></svg> Webhook deliveries</h2></div>
             <div class="card-body stack tight" style="max-height:380px;overflow:auto">
                 <% if (deliveries.length === 0) { %>

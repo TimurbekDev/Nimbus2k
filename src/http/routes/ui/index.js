@@ -17,6 +17,7 @@ router.use(require("./auth.ui"));
 router.use(requireSession);
 
 router.use(require("./events.ui"));
+router.use(require("./pulse.ui"));
 router.use(require("./palette.ui"));
 router.use(require("./overview.ui"));
 router.use("/projects", require("./projects.ui"));

@@ -4,6 +4,7 @@ const express = require("express");
 const config = require("./config");
 const logger = require("./lib/logger");
 const { securityHeaders } = require("./http/middleware/security");
+const { timing } = require("./http/middleware/timing");
 const { notFound, errorHandler } = require("./http/middleware/errors");
 
 const log = logger("app");
@@ -16,6 +17,7 @@ app.set("x-powered-by", false);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "..", "views"));
 
+app.use(timing);
 app.use(securityHeaders);
 
 // The webhook needs the exact bytes GitHub signed, so the raw body is kept for

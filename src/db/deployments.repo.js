@@ -78,6 +78,14 @@ const deployments = {
 
     get: (id) => get(`${SELECT} WHERE d.id = ?`, id),
 
+    // Two integers that change whenever anything on a deploy page would look
+    // different, for the client's change check.
+    watermark: () => get(`
+        SELECT COALESCE(MAX(id), 0) AS last,
+               COUNT(*) FILTER (WHERE status = 'running') AS running
+        FROM deployments
+    `),
+
     // The log column is the largest one in the table, so it is only read when
     // the log itself is being displayed.
     log: (id) => get("SELECT log FROM deployments WHERE id = ?", id)?.log ?? null,

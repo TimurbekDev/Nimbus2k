@@ -32,6 +32,12 @@ const projects = {
 
     count: () => get("SELECT COUNT(*) AS n FROM projects").n,
 
+    // Changes on every edit, registration or removal; the client uses it to
+    // decide whether a page is worth re-fetching.
+    watermark: () => get(`
+        SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS at FROM projects
+    `),
+
     // The dashboard shows how each project last fared, which is one query
     // rather than one per row.
     listWithLast: () => all(`

@@ -11,8 +11,8 @@ Nimbus2k does two jobs, and the whole point is that it does them in one place:
   stack, by your own grouping, by the project that deploys it, by state or by
   image — with live CPU and memory, streamed logs, and start/stop/restart.
 
-Server-rendered EJS, two runtime dependencies (`express`, `ejs`), SQLite through
-`node:sqlite`. No build step, no bundler, no client framework.
+Server-rendered EJS, three runtime dependencies (`express`, `ejs`, `dotenv`),
+SQLite through `node:sqlite`. No build step, no bundler, no client framework.
 
 ---
 
@@ -23,6 +23,7 @@ Server-rendered EJS, two runtime dependencies (`express`, `ejs`), SQLite through
 - [How a deploy works](#how-a-deploy-works)
 - [The fleet view](#the-fleet-view)
 - [Groups](#groups)
+- [How it stays fast](#how-it-stays-fast)
 - [Configuration](#configuration)
 - [HTTP API](#http-api)
 - [Running behind a reverse proxy](#running-behind-a-reverse-proxy)
@@ -38,23 +39,31 @@ Server-rendered EJS, two runtime dependencies (`express`, `ejs`), SQLite through
 git clone https://github.com/TimurbekDev/nimbus2k.git /srv/projects/nimbus2k
 cd /srv/projects/nimbus2k
 
-cp .env.example .env
-```
-
-Fill in `.env`. Three values are required and Nimbus2k will not start without
-them:
-
-```ini
-GITHUB_WEBHOOK_SECRET=...        # the same secret you give GitHub
-ADMIN_USER=admin
-ADMIN_PASSWORD=...               # at least 12 characters
-```
-
-Then:
-
-```bash
 docker compose up -d --build
+docker compose logs nimbus2k
 ```
+
+There is nothing to configure first. The first run generates an admin password
+and a webhook secret, prints them once, and stores them — the password hashed —
+beside the database:
+
+```
+────────────────────────────────────────────────────────────────────
+  Nimbus2k generated credentials on this first run
+────────────────────────────────────────────────────────────────────
+
+  Sign in with:
+
+      username   admin
+      password   tbpxJasBP5GTjKJW
+
+  GitHub webhook secret:
+
+      74d27656915ccc11afbcd9900dc30530ff4ec1607ba0f40c
+```
+
+Both are shown again under Settings, so a lost terminal is not a lost install.
+`.env` exists only to override things — see [Configuration](#configuration).
 
 Point a GitHub webhook at `https://your-host/webhook`:
 
@@ -71,7 +80,7 @@ Running without docker, for development:
 
 ```bash
 npm install
-GITHUB_WEBHOOK_SECRET=dev ADMIN_USER=admin ADMIN_PASSWORD=dev-password-1234 npm run dev
+npm run dev
 ```
 
 ---
@@ -81,27 +90,32 @@ GITHUB_WEBHOOK_SECRET=dev ADMIN_USER=admin ADMIN_PASSWORD=dev-password-1234 npm 
 The UI takes a username and a password. The API takes either the same pair over
 HTTP Basic, or a bearer token when `ADMIN_TOKEN` is set.
 
-**Store the password as a digest** rather than in the clear — a leaked `.env`
-then costs you one system rather than every system where that password was
-reused:
+**Nimbus2k only ever holds a digest.** There is no step to remember and no tool
+to run: whatever the password is, it is stored as scrypt and compared as scrypt.
 
-```bash
-npm run hash-password
-# Password: ····························
-#
-# Add this to .env, and remove ADMIN_PASSWORD:
-#
-# ADMIN_PASSWORD_HASH=scrypt$16384$8$1$…
+To choose your own instead of the generated one, put it in `.env` and restart:
+
+```ini
+ADMIN_PASSWORD=at-least-twelve-characters
 ```
 
-Put the line in `.env`, delete `ADMIN_PASSWORD`, restart. When both are present
-the hash wins.
+The next boot hashes it, stores the digest in `data/secrets.json`, and from then
+on **that line can be deleted** — the password keeps working. Change the line
+and the next boot re-hashes it; the old password stops working immediately.
+
+Already manage a digest elsewhere? `ADMIN_PASSWORD_HASH` wins over everything.
 
 Sessions live in memory in an `HttpOnly`, `SameSite=Strict` cookie scoped to
 `/ui`, and last `SESSION_TTL_MS` (12 hours by default). A restart signs everyone
 out. Sign-in is rate-limited per client address — ten attempts, then a
 fifteen-minute lockout — and every attempt, successful or not, lands in the
 audit log.
+
+### Resetting a forgotten password
+
+Delete `data/secrets.json` (or just its `adminPasswordHash`) and restart. A new
+password is generated and printed. Nothing else in it is precious except the
+webhook secret, which is printed again alongside.
 
 ---
 
@@ -187,18 +201,55 @@ ungrouped.
 
 ---
 
+## How it stays fast
+
+Every page an operator waits on renders in tens of milliseconds. That is not
+free, because the docker CLI is not fast:
+
+| call                       | cost   |
+| -------------------------- | ------ |
+| `docker stats --no-stream` | ~2.1 s |
+| `docker system df`         | ~590 ms |
+| `docker info`              | ~220 ms |
+| `docker ps -a`             | ~110 ms |
+
+`docker stats` costs two seconds whether there are two containers or fifty, so
+**no request ever waits on it**. It is sampled behind the request and the page
+renders with the last sample; the first fleet view after a restart simply has no
+meters for a second. Everything else is stale-while-revalidate: the cached answer
+is returned immediately and the refresh happens behind the response. A gauge that
+is three seconds old beats a page that took three seconds to arrive.
+
+The caches are filled at boot, after `listen`, so the first operator to open a
+page does not pay for the first `docker system df` either.
+
+The browser side follows the same rule. Instead of re-fetching a 20 kB page on a
+timer, it polls `/ui/pulse` — a fingerprint of everything that would make a page
+look different — every five seconds, and re-renders only when it changes. CPU
+percentages are deliberately excluded from that fingerprint, so a meter twitching
+by a tenth of a percent does not count as a change; the two pages that draw
+meters ask for a slow full refresh on top.
+
+Sitting idle on the fleet page for twenty seconds costs four ~30-byte polls and
+one page refresh, against two full 1.2-second renders before. Any request over
+400 ms is logged as `slow request`, so a regression here is visible rather than
+merely felt.
+
+---
+
 ## Configuration
 
-Every setting is read from the environment at boot. `.env.example` documents all
-of them; the ones worth knowing:
+**Every variable is optional.** Nimbus2k starts with no `.env` at all; the file
+exists to override a default or to pin a secret it would otherwise generate.
+`.env.example` lists them all commented out. The ones worth knowing:
 
 | Variable                        | Default              | Meaning                                                        |
 | ------------------------------- | -------------------- | -------------------------------------------------------------- |
-| `GITHUB_WEBHOOK_SECRET`         | —                    | **Required.** HMAC secret for every delivery.                  |
-| `ADMIN_USER`                    | `admin`              | **Required.** The operator who signs in.                       |
-| `ADMIN_PASSWORD`                | —                    | **Required** unless a hash is set. At least 12 characters.     |
-| `ADMIN_PASSWORD_HASH`           | —                    | scrypt digest from `npm run hash-password`. Wins over the above. |
-| `ADMIN_TOKEN`                   | —                    | Optional bearer token for the API. At least 16 characters.     |
+| `GITHUB_WEBHOOK_SECRET`         | *generated*          | HMAC secret for every delivery. Shown under Settings.          |
+| `ADMIN_USER`                    | `admin`              | The operator who signs in.                                     |
+| `ADMIN_PASSWORD`                | *generated*          | At least 12 characters. Hashed on the next boot, then deletable. |
+| `ADMIN_PASSWORD_HASH`           | —                    | An scrypt digest you manage yourself. Wins over the above.     |
+| `ADMIN_TOKEN`                   | —                    | Bearer token for the API. At least 16 characters.              |
 | `SESSION_TTL_MS`                | `43200000`           | How long a browser session lasts.                              |
 | `PROJECTS_DIR`                  | `/srv/projects`      | Where checkouts live.                                          |
 | `DB_PATH`                       | `./data/nimbus2k.db` | Registry, history, groups, audit log.                          |
@@ -211,8 +262,10 @@ of them; the ones worth knowing:
 | `APP_NAME` / `APP_TAGLINE`      | `Nimbus2k` / …       | Branding in the sidebar, title and login card.                 |
 | `LOG_LEVEL`                     | `info`               | `debug` \| `info` \| `warn` \| `error`.                        |
 
-Nimbus2k prints what is wrong and exits when a required value is missing, rather
-than starting with a default credential.
+Nimbus2k refuses to start only on a value it cannot interpret — a password
+shorter than twelve characters, a token shorter than sixteen — and says which
+one. It never starts with a default credential; a missing one is generated
+instead.
 
 ---
 
@@ -322,17 +375,16 @@ nimbus2k.example.com {
 src/
   index.js              bootstrap: listen, graceful shutdown
   app.js                express wiring
-  config/               every setting, validated once at boot
+  config/               every setting, plus first-run credential generation
   lib/                  logger, event bus, process spawning, passwords, validation, formatting
   db/                   connection, versioned migrations, one repository per table
-  services/             deploy, docker, fleet (grouping), auth
+  services/             deploy, docker (cached), fleet (grouping), auth
   http/
-    middleware/         auth, security headers, errors, view locals
+    middleware/         auth, security headers, errors, timing, view locals
     routes/
       webhook.routes.js
       api/              versioned JSON API
-      ui/               one module per page + the SSE endpoints
-  tools/                hash-password
+      ui/               one module per page, the SSE endpoints and /ui/pulse
 views/
   partials/             shell, sidebar, topbar, icon sprite, shared fragments
   pages/                one template per page
@@ -357,10 +409,9 @@ Nimbus2k is the same application, renamed and restructured. An in-place upgrade
 works, with three things to know:
 
 1. **Sign-in changed.** 1.x accepted a single `ADMIN_TOKEN` — and shipped a
-   hard-coded fallback for it. That is gone. Set `ADMIN_USER` and
-   `ADMIN_PASSWORD` (or `ADMIN_PASSWORD_HASH`) in `.env` before restarting, or
-   the process exits with an explanation. `ADMIN_TOKEN` survives as an optional
-   API-only bearer token.
+   hard-coded fallback for it. That is gone. The UI now takes a username and a
+   password; if you set neither, one is generated and printed on the first
+   start. `ADMIN_TOKEN` survives as an optional API-only bearer token.
 2. **The database is adopted automatically.** An existing
    `data/deploy-server.db` (or `data/nimbus.db`) is renamed to
    `data/nimbus2k.db` on first start and migrated: `repos` becomes `projects`,
@@ -385,8 +436,10 @@ docker rm -f deploy-server
 - Sign-in checks the username and the password every time, even when the name is
   already wrong, so both halves cost the same amount of work and the error
   message never says which one was wrong.
-- Passwords may be stored as an scrypt digest (`N=16384, r=8, p=1`, 64-byte key,
-  random 16-byte salt) rather than in the clear.
+- Passwords are only ever stored as an scrypt digest (`N=16384, r=8, p=1`,
+  64-byte key, random 16-byte salt), in `data/secrets.json` at mode 0600. A
+  plaintext `ADMIN_PASSWORD` is hashed on the first boot that sees it and never
+  written anywhere.
 - The UI trades the credentials for a random session id once, kept in an
   `HttpOnly`, `SameSite=Strict` cookie scoped to `/ui`. Sessions live in memory:
   a restart signs everyone out.

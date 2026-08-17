@@ -10,6 +10,18 @@ const server = app.listen(config.PORT, config.HOST, () => {
         env: config.NODE_ENV,
         projects: config.PROJECTS_DIR,
     });
+
+    // Last on the screen on purpose: a password shown once should not be
+    // scrolled away by a startup line.
+    require("./config/bootstrap").announce(config.BOOTSTRAP, {
+        appName: config.APP_NAME,
+        user: config.ADMIN_USER,
+    });
+
+    // Behind the listen, not in front of it: the port should be open
+    // immediately, and this only decides whether the first page is instant or
+    // waits for a `docker system df`.
+    void require("./services/docker.service").warmUp();
 });
 
 // Server-sent event connections are long-lived by design, so a shutdown that

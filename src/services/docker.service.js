@@ -135,15 +135,26 @@ function normalise(row) {
 
 // ------------------------------------------------------------------ caching
 
-// The fleet page, its auto-refresh and the SSE tick all want the same snapshot
-// within the same second. One in-flight promise serves all of them.
-function cached(ttlMs, producer) {
+/**
+ * Stale-while-revalidate around one docker call.
+ *
+ * The fleet page, its auto-refresh and the SSE tick all want the same snapshot
+ * within the same second, so a single in-flight promise serves all of them. Past
+ * the TTL the cached answer is still served immediately and the refresh happens
+ * behind the request: every one of these numbers is a gauge, and a gauge that is
+ * three seconds old beats a page that took three seconds to arrive.
+ *
+ * `background: true` means a request never waits at all, not even the first one.
+ * That is right for `docker stats`, which takes two seconds no matter how few
+ * containers there are - the first fleet view renders without meters and the
+ * next one has them.
+ */
+function cached(ttlMs, producer, { background = false } = {}) {
     let value = null;
     let expires = 0;
     let inflight = null;
 
-    return function read({ force = false } = {}) {
-        if (!force && value && Date.now() < expires) return Promise.resolve(value);
+    const refresh = () => {
         if (inflight) return inflight;
 
         inflight = producer()
@@ -152,10 +163,40 @@ function cached(ttlMs, producer) {
                 expires = Date.now() + ttlMs;
                 return next;
             })
+            .catch((err) => {
+                // A failed refresh keeps the previous answer rather than
+                // throwing away a working page; the next read tries again.
+                if (value === null) throw err;
+                expires = Date.now() + Math.min(ttlMs, 2000);
+                log.warn("refresh failed, serving the previous sample", { error: err.message });
+                return value;
+            })
             .finally(() => { inflight = null; });
 
         return inflight;
     };
+
+    const read = ({ force = false } = {}) => {
+        if (force) return refresh();
+
+        const fresh = value !== null && Date.now() < expires;
+        if (fresh) return Promise.resolve(value);
+
+        // Nothing usable yet: a background reader accepts null and lets the
+        // first sample land later, everything else waits for it once.
+        if (value === null) {
+            if (!background) return refresh();
+            void refresh();
+            return Promise.resolve(null);
+        }
+
+        void refresh();
+        return Promise.resolve(value);
+    };
+
+    read.peek = () => value;
+
+    return read;
 }
 
 const docker = (args, options = {}) =>
@@ -191,12 +232,15 @@ const listRaw = cached(DOCKER_PS_TTL_MS, async () => {
     return parseLines(stdout).map(normalise);
 });
 
-// `docker stats` opens a stream per container even with --no-stream, so it is
-// both the slowest call here and the one that matters least if it is a couple
-// of seconds stale.
+// `docker stats` opens a stream per container even with --no-stream, so it
+// costs roughly two seconds whatever the fleet size - by far the slowest call
+// here, and the one that matters least if it is a few seconds stale. It is
+// therefore sampled entirely behind the request.
 const statsRaw = cached(DOCKER_STATS_TTL_MS, async () => {
     try {
-        const { stdout } = await docker(["stats", "--no-stream", "--format", "{{json .}}"]);
+        const { stdout } = await docker(["stats", "--no-stream", "--format", "{{json .}}"], {
+            timeoutMs: Math.max(DOCKER_TIMEOUT_MS, 30000),
+        });
 
         return new Map(parseLines(stdout).map((row) => [row.Name, {
             cpu: parseFloat(row.CPUPerc) || 0,
@@ -212,7 +256,7 @@ const statsRaw = cached(DOCKER_STATS_TTL_MS, async () => {
         log.warn("stats unavailable", { error: err.message });
         return new Map();
     }
-});
+}, { background: true });
 
 // ------------------------------------------------------------------ reads
 
@@ -220,7 +264,10 @@ async function list({ withStats = true, force = false } = {}) {
     const containers = await listRaw({ force });
     if (!withStats) return containers;
 
+    // Never awaited beyond the first sample; `null` simply means the meters are
+    // not in yet.
     const stats = await statsRaw();
+    if (!stats) return containers.map((container) => ({ ...container, stats: null }));
 
     return containers.map((container) => ({
         ...container,
@@ -328,9 +375,12 @@ function followLogs(ref, { onLine, tail = 100 }) {
     return { close: () => stop && stop(), done };
 }
 
-async function systemUsage() {
+// Disk usage moves in minutes, not seconds, and `docker system df` walks every
+// image and layer to answer - so it is cached hard and refreshed behind the
+// request.
+const systemUsage = cached(60000, async () => {
     try {
-        const { stdout } = await docker(["system", "df", "--format", "{{json .}}"], { timeoutMs: 10000 });
+        const { stdout } = await docker(["system", "df", "--format", "{{json .}}"], { timeoutMs: 30000 });
 
         const rows = parseLines(stdout);
         const byType = Object.fromEntries(rows.map((row) => [row.Type, row]));
@@ -352,14 +402,16 @@ async function systemUsage() {
     } catch (err) {
         return { ok: false, error: err.message };
     }
-}
+});
 
 // `docker info` is asked for the whole document rather than a template that
 // picks fields: the `dict` function templates would need is missing from some
-// CLI builds, and the payload is a few kilobytes either way.
-async function daemonInfo() {
+// CLI builds, and the payload is a few kilobytes either way. Nothing in it
+// changes minute to minute except the container counts, which the fleet view
+// already has first-hand.
+const daemonInfo = cached(120000, async () => {
     try {
-        const { stdout } = await docker(["info", "--format", "{{json .}}"], { timeoutMs: 8000 });
+        const { stdout } = await docker(["info", "--format", "{{json .}}"], { timeoutMs: 15000 });
         const raw = JSON.parse(stdout.trim());
 
         return {
@@ -379,7 +431,7 @@ async function daemonInfo() {
     } catch (err) {
         return { ok: false, error: err.message };
     }
-}
+});
 
 // ------------------------------------------------------------------ actions
 
@@ -472,13 +524,34 @@ async function prune(what) {
     }
 
     const { stdout } = await docker(args, { timeoutMs: 120000 });
+
+    // The disk figures are what the operator just changed, so the cached ones
+    // would be the wrong answer to the only question they are about to ask.
+    await Promise.all([systemUsage({ force: true }), listRaw({ force: true })]);
     publish("containers", { reason: `prune:${what}` });
 
     const reclaimed = /Total reclaimed space:\s*(.+)/.exec(stdout);
     return { target: what, reclaimed: reclaimed ? reclaimed[1].trim() : "0B" };
 }
 
+// Filling the caches at boot means the first operator to open a page does not
+// pay for the first `docker system df` of the process. Failures are ignored:
+// this is an optimisation, and every one of these calls handles being down.
+function warmUp() {
+    return Promise.allSettled([
+        health(),
+        listRaw(),
+        statsRaw(),
+        systemUsage(),
+        daemonInfo(),
+    ]).then((results) => {
+        const failed = results.filter((r) => r.status === "rejected").length;
+        log.debug("caches warmed", { failed });
+    });
+}
+
 module.exports = {
+    warmUp,
     list,
     byRef,
     inspect,

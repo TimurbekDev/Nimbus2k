@@ -25,12 +25,13 @@ const settingsView = () => [
     { key: "LOG_TAIL_BYTES", value: String(config.LOG_TAIL_BYTES), note: "log kept per run" },
     { key: "CONTAINER_ACTIONS", value: String(config.CONTAINER_ACTIONS), note: "start / stop / restart from the UI" },
     { key: "CONTAINER_DESTRUCTIVE_ACTIONS", value: String(config.CONTAINER_DESTRUCTIVE_ACTIONS), note: "kill, remove and prune" },
-    { key: "GITHUB_WEBHOOK_SECRET", value: `set · ${config.SECRET.length} characters`, note: "verifies every delivery" },
     { key: "ADMIN_USER", value: config.ADMIN_USER, note: "the operator who signs in" },
     {
         key: "ADMIN_PASSWORD",
-        value: config.ADMIN_PASSWORD_HASH ? "set · scrypt hash" : `set · ${config.ADMIN_PASSWORD.length} characters`,
-        note: config.ADMIN_PASSWORD_HASH ? "stored as a digest" : "stored in the clear — consider ADMIN_PASSWORD_HASH",
+        value: "scrypt digest",
+        note: config.PASSWORD_FROM_ENV
+            ? "hashed from .env — that line can now be deleted"
+            : "generated on first run, stored hashed",
     },
     {
         key: "ADMIN_TOKEN",
@@ -58,6 +59,9 @@ router.get("/", async (req, res) => {
         nav: "settings",
         settings: settingsView(),
         apiExample: apiExample(),
+        // Shown so a generated secret can be copied into GitHub; there is
+        // nowhere else to read it from.
+        webhook: { secret: config.SECRET, generated: config.SECRET_GENERATED },
         health,
         usage,
         info,
