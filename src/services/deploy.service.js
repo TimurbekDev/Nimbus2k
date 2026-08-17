@@ -1,12 +1,15 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { STEP_TIMEOUT_MS, LOG_TAIL_BYTES } = require("../config");
+const { STEP_TIMEOUT_MS, LOG_TAIL_BYTES, APP_NAME } = require("../config");
 const { stream } = require("../lib/exec");
+const { redact } = require("../lib/giturl");
+const envfile = require("../lib/envfile");
 const { publish } = require("../lib/bus");
 const logger = require("../lib/logger");
 const deploymentsRepo = require("../db/deployments.repo");
 const projectsRepo = require("../db/projects.repo");
+const projectEnv = require("../db/env.repo");
 
 const log = logger("deploy");
 
@@ -44,18 +47,79 @@ function makeLog(project, id) {
 
 // ------------------------------------------------------------------ steps
 
+// A checkout that is not there yet is not an error when Nimbus2k knows where it
+// comes from: the first deploy creates it.
+const needsClone = (project) => !fs.existsSync(path.join(project.path, ".git"));
+
+// Written at 0600: it holds whatever the stack needs to run, which is usually
+// every credential the application has.
+function writeEnvFile(project, variables) {
+    const target = path.join(project.path, ".env");
+
+    fs.writeFileSync(target, envfile.format(variables, {
+        header: `Written by ${APP_NAME} for ${project.name}.\nEdit it in the UI — this file is rewritten on every deploy.`,
+    }), { mode: 0o600 });
+
+    try {
+        fs.chmodSync(target, 0o600);
+    } catch {
+        // Windows and some bind mounts; the directory permissions still apply.
+    }
+
+    return `wrote ${target} (${variables.length} variables)`;
+}
+
+// git will happily sit waiting for a password or a host-key answer that nobody
+// is there to type, and the step would hang until STEP_TIMEOUT_MS. Failing in a
+// second with a readable message is worth far more than waiting fifteen minutes
+// for the same outcome.
+const GIT_ENV = {
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+};
+
 // Named so the UI can show which phase a run is in rather than only its output.
 function buildPlan(project, branch) {
     const compose = ["compose"];
     if (project.compose_file) compose.push("-f", project.compose_file);
 
-    const plan = [
-        { name: "fetch", command: "git", args: ["fetch", "--prune", "origin"] },
+    const plan = [];
+
+    if (project.repo_url && needsClone(project)) {
+        plan.push({
+            name: "clone",
+            command: "git",
+            // `--` so a URL can never be read as an option, whatever slipped
+            // past validation.
+            args: ["clone", "--branch", branch, "--", project.repo_url, project.path],
+            // The checkout does not exist yet, so the step runs in its parent.
+            cwd: path.dirname(project.path),
+            env: GIT_ENV,
+        });
+    }
+
+    plan.push(
+        { name: "fetch", command: "git", args: ["fetch", "--prune", "origin"], env: GIT_ENV },
         { name: "reset", command: "git", args: ["reset", "--hard", `origin/${branch}`] },
-    ];
+    );
 
     if (project.clean_untracked) {
         plan.push({ name: "clean", command: "git", args: ["clean", "-fd"] });
+    }
+
+    // After `clean`, which would delete an untracked .env, and before `build`,
+    // which is what reads it. Nothing is written when the project has no
+    // variables: an empty set means "this checkout manages its own .env".
+    const variables = projectEnv.list(project.id);
+
+    if (variables.length > 0) {
+        plan.push({
+            name: "env",
+            // Only the names are ever described or logged; the values are the
+            // whole point of keeping them out of the repository.
+            describe: `write .env — ${variables.map((pair) => pair.key).join(", ")}`,
+            run: () => writeEnvFile(project, variables),
+        });
     }
 
     plan.push({ name: "build", command: "docker", args: [...compose, "up", "-d", "--build", "--remove-orphans"] });
@@ -68,11 +132,21 @@ function buildPlan(project, branch) {
 }
 
 async function runStep(entry, logSink, cwd, step, index, total) {
-    logSink.write(`── [${index + 1}/${total}] ${step.name}: ${step.command} ${step.args.join(" ")}`);
+    logSink.write(`── [${index + 1}/${total}] ${step.name}: ${step.describe || `${step.command} ${step.args.join(" ")}`}`);
     publish("step", { id: entry.deploymentId, step: step.name, index, total });
 
+    // Not every step is a command: writing the .env is Nimbus2k's own work, and
+    // belongs in the plan so it is visible and ordered like the rest.
+    if (step.run) {
+        const note = await step.run();
+        if (note) logSink.write(note);
+        return;
+    }
+
     await stream(step.command, step.args, {
-        cwd,
+        // A clone runs in the parent of the checkout it is about to create.
+        cwd: step.cwd || cwd,
+        env: step.env,
         timeoutMs: STEP_TIMEOUT_MS,
         onLine: (line) => logSink.write(line),
         register: (stop) => { entry.stop = stop; },
@@ -100,8 +174,18 @@ async function runDeploy(entry, project, job) {
     let error = null;
 
     try {
-        if (!fs.existsSync(path.join(project.path, ".git"))) {
-            throw new Error(`${project.path} is not a git checkout`);
+        if (needsClone(project)) {
+            if (!project.repo_url) {
+                throw new Error(`${project.path} is not a git checkout, and this project has no repository URL to clone from`);
+            }
+
+            if (fs.existsSync(project.path) && fs.readdirSync(project.path).length > 0) {
+                throw new Error(`${project.path} already exists and is not empty — move it aside, or point the project somewhere else`);
+            }
+
+            // `git clone` creates the checkout itself but not the tree above it.
+            fs.mkdirSync(path.dirname(project.path), { recursive: true });
+            sink.write(`⤓ cloning ${redact(project.repo_url)} into ${project.path}`);
         }
 
         const plan = buildPlan(project, branch);
@@ -211,4 +295,4 @@ const active = () => [...queue.entries()]
 
 const liveLog = (id) => liveLogs.get(id) || null;
 
-module.exports = { schedule, cancel, isRunning, runningNames, active, liveLog, buildPlan };
+module.exports = { schedule, cancel, isRunning, runningNames, active, liveLog, buildPlan, needsClone };

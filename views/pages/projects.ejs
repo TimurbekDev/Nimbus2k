@@ -154,27 +154,33 @@
     </div>
     <div class="card-body">
         <p class="t-sm muted" style="margin-bottom:14px">
-            Only needed when auto-registration is off, or when the checkout lives outside
-            <code><%= projectsDir %></code>. The name has to match the GitHub repository name exactly.
+            Give the repository URL and where to put it. <%= app.name %> clones it, brings the
+            stack up with <code>docker compose</code>, and streams the whole thing as the
+            project's first deploy. The name comes from the URL — it has to match what
+            GitHub sends for the webhook to find it later.
         </p>
 
         <form class="form-grid two" method="post" action="/ui/projects">
-            <label class="field">
-                Name
-                <input type="text" name="name" placeholder="my-app" autocomplete="off" required>
-                <span class="hint">Must equal the GitHub repository name.</span>
+            <label class="field" style="grid-column: 1 / -1">
+                Repository URL
+                <input type="text" name="repo_url" autocomplete="off" spellcheck="false"
+                       placeholder="git@github.com:owner/my-app.git">
+                <span class="hint">
+                    https or ssh. A private repository clones with the deploy key mounted at
+                    <code>/root/.ssh</code>.
+                </span>
             </label>
 
             <label class="field">
                 Branch
                 <input type="text" name="branch" placeholder="main" autocomplete="off">
-                <span class="hint">Only pushes to this branch deploy.</span>
+                <span class="hint">Cloned, and the only branch whose pushes deploy.</span>
             </label>
 
             <label class="field">
-                Checkout path
-                <input type="text" name="path" placeholder="<%= projectsDir %>/my-app" autocomplete="off">
-                <span class="hint">Absolute path to an existing git checkout.</span>
+                Where to put it
+                <input type="text" name="path" value="<%= projectsDir %>" autocomplete="off">
+                <span class="hint">The checkout becomes this directory plus the repository name.</span>
             </label>
 
             <label class="field">
@@ -187,18 +193,62 @@
                 </select>
             </label>
 
-            <label class="field" style="grid-column: 1 / -1">
+            <label class="field">
                 Description
                 <input type="text" name="description" placeholder="What this service does" autocomplete="off">
             </label>
 
+            <div class="col" style="grid-column: 1 / -1; gap:8px">
+                <div>
+                    <span class="t-sm strong">Environment</span>
+                    <p class="t-xs dim" style="margin:2px 0 0">
+                        Written to <code>.env</code> in the checkout before <code>docker compose up</code>,
+                        so the stack can read it. Kept here, not in the repository.
+                    </p>
+                </div>
+                <%- include("../partials/env-editor", { rows: [], blanks: 3, isSecret: function () { return false; } }) %>
+            </div>
+
             <div class="form-actions" style="grid-column: 1 / -1">
                 <button class="btn" type="submit">
-                    <svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>
-                    Register
+                    <svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>
+                    Clone and deploy
                 </button>
+                <span class="t-xs dim">Starts immediately; you can watch the log on the next page.</span>
             </div>
         </form>
+
+        <details class="disclosure" style="margin-top:16px">
+            <summary>The checkout is already on this host</summary>
+            <div class="body">
+                <p class="t-sm muted">
+                    Register it without a URL. Nothing is cloned; <%= app.name %> deploys the
+                    checkout where it stands.
+                </p>
+                <form class="form-grid two" method="post" action="/ui/projects">
+                    <label class="field">
+                        Name
+                        <input type="text" name="name" placeholder="my-app" autocomplete="off" required>
+                        <span class="hint">Must equal the GitHub repository name.</span>
+                    </label>
+
+                    <label class="field">
+                        Branch
+                        <input type="text" name="branch" placeholder="main" autocomplete="off">
+                    </label>
+
+                    <label class="field" style="grid-column: 1 / -1">
+                        Checkout path
+                        <input type="text" name="path" placeholder="<%= projectsDir %>/my-app" autocomplete="off">
+                        <span class="hint">The existing checkout, or the directory that holds it.</span>
+                    </label>
+
+                    <div class="form-actions" style="grid-column: 1 / -1">
+                        <button class="btn ghost" type="submit">Register only</button>
+                    </div>
+                </form>
+            </div>
+        </details>
     </div>
 </section>
 

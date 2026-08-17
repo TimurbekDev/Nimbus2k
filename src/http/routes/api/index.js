@@ -19,6 +19,8 @@ router.get("/", (req, res) => res.json({
         "GET    /api/v1/projects/:name",
         "PATCH  /api/v1/projects/:name",
         "DELETE /api/v1/projects/:name",
+        "GET    /api/v1/projects/:name/env",
+        "PUT    /api/v1/projects/:name/env",
         "POST   /api/v1/projects/:name/deploy",
         "POST   /api/v1/projects/:name/cancel",
         "GET    /api/v1/deployments",

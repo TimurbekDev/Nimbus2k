@@ -27,9 +27,9 @@ const BASE = { shell: false, detached: GROUPED, windowsHide: true };
  * caller inspects `code` itself - useful for probes like `docker version`,
  * where a failure is an answer rather than an error.
  */
-function capture(command, args, { cwd, timeoutMs = 30000, allowFailure = false, input } = {}) {
+function capture(command, args, { cwd, env, timeoutMs = 30000, allowFailure = false, input } = {}) {
     return new Promise((resolve, reject) => {
-        const child = spawn(command, args, { ...BASE, cwd });
+        const child = spawn(command, args, { ...BASE, cwd, env: env && { ...process.env, ...env } });
 
         let stdout = "";
         let stderr = "";
@@ -71,9 +71,9 @@ function capture(command, args, { cwd, timeoutMs = 30000, allowFailure = false, 
  * is produced. `register` receives a stop function so a caller can cancel a
  * step that is still running.
  */
-function stream(command, args, { cwd, timeoutMs = 0, onLine, register } = {}) {
+function stream(command, args, { cwd, env, timeoutMs = 0, onLine, register } = {}) {
     return new Promise((resolve, reject) => {
-        const child = spawn(command, args, { ...BASE, cwd });
+        const child = spawn(command, args, { ...BASE, cwd, env: env && { ...process.env, ...env } });
         let stopped = false;
 
         const stop = () => {

@@ -1,0 +1,79 @@
+<%#
+  Key/value editor for a project's .env.
+  Locals: rows (array of { key, value }), blanks (how many empty rows to offer),
+  and isSecret (a function that decides whether a value starts masked).
+%>
+<div class="env-editor" data-env-editor>
+    <div class="env-rows" data-env-rows>
+        <% rows.forEach(function (pair) { %>
+        <div class="env-row">
+            <input type="text" name="env_key" value="<%= pair.key %>" placeholder="KEY"
+                   autocomplete="off" autocapitalize="none" spellcheck="false">
+            <div class="env-value">
+                <input type="<%= isSecret(pair.key) ? "password" : "text" %>" name="env_value"
+                       value="<%= pair.value %>" placeholder="value"
+                       autocomplete="off" autocapitalize="none" spellcheck="false">
+                <% if (isSecret(pair.key)) { %>
+                <button class="btn quiet icon sm" type="button" data-env-reveal title="Show value">
+                    <svg class="i sm" aria-hidden="true"><use href="#i-eye"></use></svg>
+                </button>
+                <% } %>
+            </div>
+            <button class="btn quiet icon sm" type="button" data-env-remove title="Remove">
+                <svg class="i sm" aria-hidden="true"><use href="#i-x"></use></svg>
+            </button>
+        </div>
+        <% }) %>
+
+        <% for (let i = 0; i < blanks; i += 1) { %>
+        <div class="env-row">
+            <input type="text" name="env_key" placeholder="KEY"
+                   autocomplete="off" autocapitalize="none" spellcheck="false">
+            <div class="env-value">
+                <input type="text" name="env_value" placeholder="value"
+                       autocomplete="off" autocapitalize="none" spellcheck="false">
+            </div>
+            <button class="btn quiet icon sm" type="button" data-env-remove title="Remove">
+                <svg class="i sm" aria-hidden="true"><use href="#i-x"></use></svg>
+            </button>
+        </div>
+        <% } %>
+    </div>
+
+    <%# Cloned by the client for "Add variable"; never submitted itself. %>
+    <template data-env-template>
+        <div class="env-row">
+            <input type="text" name="env_key" placeholder="KEY"
+                   autocomplete="off" autocapitalize="none" spellcheck="false">
+            <div class="env-value">
+                <input type="text" name="env_value" placeholder="value"
+                       autocomplete="off" autocapitalize="none" spellcheck="false">
+            </div>
+            <button class="btn quiet icon sm" type="button" data-env-remove title="Remove">
+                <svg class="i sm" aria-hidden="true"><use href="#i-x"></use></svg>
+            </button>
+        </div>
+    </template>
+
+    <div class="row tight" style="margin-top:8px">
+        <button class="btn ghost sm" type="button" data-env-add>
+            <svg class="i sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+            Add variable
+        </button>
+        <span class="t-xs dim">Empty rows are ignored.</span>
+    </div>
+
+    <details class="disclosure" style="margin-top:10px">
+        <summary>Paste a whole .env instead</summary>
+        <div class="body">
+            <label class="field">
+                <textarea name="env_text" rows="6" spellcheck="false"
+                          placeholder="DATABASE_URL=postgres://user:pass@db:5432/app&#10;PORT=8080"></textarea>
+                <span class="hint">
+                    One <code>KEY=value</code> per line. <code>#</code> comments and
+                    <code>export</code> are understood; a pasted key replaces the same key above.
+                </span>
+            </label>
+        </div>
+    </details>
+</div>

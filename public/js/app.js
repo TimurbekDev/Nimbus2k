@@ -248,6 +248,59 @@
         });
     }
 
+    // ---------------------------------------------------------------- env
+
+    // The .env editor: rows of key/value that the server reads back as two
+    // parallel arrays. Progressive enhancement only - the form already works
+    // with whatever rows the server rendered.
+    function initEnvEditor() {
+        $$("[data-env-editor]").forEach(function (editor) {
+            if (editor.dataset.bound) return;
+            editor.dataset.bound = "1";
+
+            var rows = $("[data-env-rows]", editor);
+            var template = $("[data-env-template]", editor);
+
+            var add = $("[data-env-add]", editor);
+            if (add) {
+                add.addEventListener("click", function () {
+                    var row = template.content.firstElementChild.cloneNode(true);
+                    rows.appendChild(row);
+                    row.querySelector("input").focus();
+                });
+            }
+
+            editor.addEventListener("click", function (event) {
+                var remove = event.target.closest("[data-env-remove]");
+                if (remove) {
+                    var row = remove.closest(".env-row");
+                    // Never leave the editor with nothing to type into.
+                    if (rows.children.length > 1) row.remove();
+                    else row.querySelectorAll("input").forEach(function (input) { input.value = ""; });
+                    return;
+                }
+
+                var reveal = event.target.closest("[data-env-reveal]");
+                if (!reveal) return;
+
+                var input = reveal.parentElement.querySelector("input");
+                var hidden = input.type === "password";
+                input.type = hidden ? "text" : "password";
+                reveal.setAttribute("title", hidden ? "Hide value" : "Show value");
+            });
+
+            // Typing a key that looks like a credential should not leave the
+            // value on screen for the next person walking past.
+            rows.addEventListener("blur", function (event) {
+                if (event.target.name !== "env_key") return;
+                if (!/(PASS|SECRET|TOKEN|KEY|CRED|AUTH|PRIVATE|SALT|DSN|SIGNATURE)/i.test(event.target.value)) return;
+
+                var value = event.target.closest(".env-row").querySelector("[name=env_value]");
+                if (value && value.type === "text" && value.value) value.type = "password";
+            }, true);
+        });
+    }
+
     // ---------------------------------------------------------------- log
 
     function logBox() { return $("#log"); }
@@ -652,6 +705,7 @@
         initConfirm();
         initCopy();
         initSecrets();
+        initEnvEditor();
         initLog();
         initContainerStream();
         initPalette();

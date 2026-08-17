@@ -123,6 +123,37 @@ const migrations = [
             CREATE INDEX idx_webhook_created ON webhook_events(id DESC);
         `),
     },
+
+    {
+        id: 5,
+        name: "remember where a project came from",
+        up: (db) => db.exec(`
+            -- Set when a project is registered by URL. The checkout is then
+            -- Nimbus2k's to create: the first deploy clones it.
+            ALTER TABLE projects ADD COLUMN repo_url TEXT;
+        `),
+    },
+
+    {
+        id: 6,
+        name: "per-project environment variables",
+        up: (db) => db.exec(`
+            -- The .env a project's compose file expects. Kept here rather than
+            -- in the checkout because the checkout is disposable: a deploy may
+            -- clone it from scratch or wipe untracked files, and these values
+            -- have to survive both.
+            CREATE TABLE project_env (
+                id         INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                key        TEXT NOT NULL,
+                value      TEXT NOT NULL DEFAULT '',
+                position   INTEGER NOT NULL DEFAULT 0,
+                UNIQUE (project_id, key)
+            );
+
+            CREATE INDEX idx_project_env ON project_env(project_id, position);
+        `),
+    },
 ];
 
 function migrate(db, log) {

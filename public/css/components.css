@@ -456,6 +456,30 @@ label.check.inline {
 .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-actions { display: flex; gap: 8px; align-items: center; padding-top: 4px; }
 
+/* ------------------------------------------------------------------ env rows */
+
+.env-rows { display: grid; gap: 6px; }
+
+.env-row {
+    display: grid;
+    grid-template-columns: minmax(110px, 0.85fr) minmax(150px, 1.6fr) auto;
+    gap: 6px;
+    align-items: center;
+}
+
+.env-row input { font-family: var(--mono); font-size: var(--t-sm); }
+.env-row input[name="env_key"] { text-transform: none; }
+
+.env-value { position: relative; display: flex; align-items: center; gap: 4px; }
+.env-value input { flex: 1; min-width: 0; }
+
+.env-editor textarea { font-family: var(--mono); font-size: var(--t-sm); }
+
+@media (max-width: 620px) {
+    .env-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .env-row .env-value { grid-column: 1 / -1; }
+}
+
 /* Radios rendered as colour chips for the group palette. */
 .hue-picker { display: flex; gap: 6px; flex-wrap: wrap; }
 .hue-picker input { position: absolute; opacity: 0; pointer-events: none; }

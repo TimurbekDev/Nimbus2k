@@ -14,7 +14,7 @@ const hydrate = (row) => row && {
 
 const WRITABLE = [
     "branch", "path", "compose_file", "enabled", "prune_images", "clean_untracked",
-    "description", "group_id", "auto_deploy", "pinned", "stack",
+    "description", "group_id", "auto_deploy", "pinned", "stack", "repo_url",
 ];
 
 const SELECT = `
@@ -57,6 +57,7 @@ const projects = {
         name,
         branch = "main",
         path: checkout,
+        repo_url = null,
         compose_file = null,
         prune_images = true,
         clean_untracked = false,
@@ -64,10 +65,10 @@ const projects = {
         group_id = null,
     }) {
         run(`
-            INSERT INTO projects (name, branch, path, compose_file, prune_images,
+            INSERT INTO projects (name, branch, path, repo_url, compose_file, prune_images,
                                   clean_untracked, description, group_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, name, branch, checkout, compose_file, prune_images ? 1 : 0,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, name, branch, checkout, repo_url, compose_file, prune_images ? 1 : 0,
             clean_untracked ? 1 : 0, description, group_id);
 
         return projects.byName(name);

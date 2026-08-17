@@ -20,6 +20,7 @@ SQLite through `node:sqlite`. No build step, no bundler, no client framework.
 
 - [Quick start](#quick-start)
 - [Signing in](#signing-in)
+- [Registering a project](#registering-a-project)
 - [How a deploy works](#how-a-deploy-works)
 - [The fleet view](#the-fleet-view)
 - [Groups](#groups)
@@ -119,6 +120,87 @@ webhook secret, which is printed again alongside.
 
 ---
 
+## Registering a project
+
+Give Nimbus2k four things and it does the rest:
+
+| You give            | Example                                |
+| ------------------- | -------------------------------------- |
+| Repository URL      | `git@github.com:acme/billing-api.git`  |
+| Where to put it     | `/srv/projects`                        |
+| Branch              | `main`                                 |
+| Group               | *Platform*, or none                    |
+| Environment         | `DATABASE_URL`, `PORT`, …              |
+
+The name comes from the URL — `billing-api` — because that is also the name
+GitHub puts in the webhook payload, and the two have to agree for a push to find
+the project. The checkout becomes the directory plus that name, so
+`/srv/projects/billing-api`.
+
+Registering then **schedules the first deploy immediately**, and that run clones
+the repository before doing anything else:
+
+```
+[1/5] clone: git clone --branch main -- git@github.com:acme/billing-api.git /srv/projects/billing-api
+[2/5] fetch: git fetch --prune origin
+[3/5] reset: git reset --hard origin/main
+[4/5] build: docker compose up -d --build --remove-orphans
+[5/5] prune: docker image prune -f
+```
+
+The clone step only appears while the checkout is missing; once it exists, every
+later deploy starts at `fetch`. So a project whose directory was wiped repairs
+itself on the next deploy, and there is one code path rather than a separate
+"provisioning" mode.
+
+A private repository clones with whatever key is mounted at `/root/.ssh`. git is
+run with `GIT_TERMINAL_PROMPT=0` and `ssh -o BatchMode=yes`, so a missing key
+fails in a second with a readable message instead of hanging on a password
+prompt nobody can answer until `STEP_TIMEOUT_MS` runs out.
+
+The URL is checked before git ever sees it: only `https`, `http` and `ssh`, no
+leading dash, no `ext::` transport, no `file://`. Those three are not
+hypothetical — each one is a way to make `git clone` run a command or read a
+path on this host.
+
+If the checkout is already on disk, register without a URL and Nimbus2k deploys
+it where it stands.
+
+
+### The project's own .env
+
+Most compose stacks want a `.env` next to the compose file — database passwords,
+ports, API keys. That file is exactly what a repository must not contain, so
+Nimbus2k holds it instead.
+
+Give the variables as key/value pairs when registering (or paste a whole `.env`
+into the box), and they are written into the checkout as one file at deploy
+time:
+
+```
+[4/6] clean: git clean -fd
+[5/6] env:   write .env — PORT, DATABASE_PASSWORD, GREETING
+[6/6] build: docker compose up -d --build --remove-orphans
+```
+
+The order is the point. The file is written **after** `git clean -fd`, which
+would otherwise delete it, and **before** `docker compose up`, which is what
+reads it. So the values survive a fresh clone, a hard reset and a clean — the
+checkout is disposable, the environment is not.
+
+Values are written quoted when they need to be (`DATABASE_PASSWORD="a b \"c\" \$d"`)
+so docker compose reads back exactly what you typed. The file is created at mode
+0600. The deploy log records the variable **names** only; values never reach a
+log, an audit entry or a page without being asked for.
+
+Editing them later is the Environment card on the project page — save, then
+deploy when you want them applied. A project with no variables set is left
+alone: Nimbus2k writes nothing and whatever `.env` the checkout has is its own
+business.
+
+
+---
+
 ## How a deploy works
 
 1. GitHub posts to `/webhook`. The HMAC in `X-Hub-Signature-256` is checked
@@ -132,11 +214,13 @@ webhook secret, which is printed again alongside.
 4. The run executes, in the checkout, in order:
 
    ```
+   git clone --branch <branch> -- <url> <path>   # only when there is no checkout yet
    git fetch --prune origin
    git reset --hard origin/<branch>
-   git clean -fd                      # only when "clean untracked" is on
+   git clean -fd                                 # only when "clean untracked" is on
+   write .env                                    # only when the project has variables
    docker compose up -d --build --remove-orphans
-   docker image prune -f              # only when "prune images" is on
+   docker image prune -f                         # only when "prune images" is on
    ```
 
 Each line of output is streamed to every open browser tab over server-sent
@@ -291,9 +375,11 @@ GET    /api/v1/status                    scheduler and deploy stats
 GET    /api/v1/system                    docker health, daemon info, disk usage
 
 GET    /api/v1/projects                  registry, each with its last run
-POST   /api/v1/projects                  register one
+POST   /api/v1/projects                  { repo_url, branch?, path?, group_id?, deploy? }
 GET    /api/v1/projects/:name
 PATCH  /api/v1/projects/:name
+GET    /api/v1/projects/:name/env        { KEY: value }
+PUT    /api/v1/projects/:name/env        replaces the whole set
 DELETE /api/v1/projects/:name
 POST   /api/v1/projects/:name/deploy     { branch? } -> 202
 POST   /api/v1/projects/:name/cancel
@@ -449,6 +535,10 @@ docker rm -f deploy-server
   origin, no inline script and no framing.
 - No shell is involved anywhere. Commands are spawned with an argument array, so
   a repository name, branch or container id can never be read as a command.
+- A repository URL is parsed against a closed list of schemes before it reaches
+  `git clone`, and passed after `--`. `ext::`, `file://` and a leading dash are
+  all refused — each is a way to turn a clone into command execution or a read
+  of this host's filesystem.
 - Every state-changing action is written to the audit log, visible under
   Settings.
 - **Mounting the docker socket is equivalent to root on the host.** That is why

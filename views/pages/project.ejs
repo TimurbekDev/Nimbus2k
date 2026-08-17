@@ -25,7 +25,12 @@
             <% if (project.description) { %><span style="margin-left:6px"><%= project.description %></span><% } %>
         </p>
 
-        <p class="t-sm dim mono" style="margin-top:6px"><%= project.path %></p>
+        <p class="t-sm dim mono" style="margin-top:6px">
+            <%= project.path %>
+            <% if (repoUrl) { %>
+            <span class="dim"> ← </span><%= repoUrl %>
+            <% } %>
+        </p>
     </div>
 
     <div class="detail-actions">
@@ -55,6 +60,30 @@
 </div>
 
 <div data-refresh="25" hidden></div>
+
+<% if (pending && !active) { %>
+<div class="banner <%= project.repo_url ? "info" : "warn" %>">
+    <svg class="i" aria-hidden="true"><use href="#i-<%= project.repo_url ? "download" : "alert-triangle" %>"></use></svg>
+    <div>
+        <% if (project.repo_url) { %>
+        <strong>Not cloned yet.</strong>
+        The next deploy clones <code><%= repoUrl %></code> into <code><%= project.path %></code>
+        and brings the stack up.
+        <form method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/deploy" style="margin-top:10px">
+            <input type="hidden" name="back" value="<%= back %>">
+            <button class="btn" type="submit">
+                <svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>
+                Clone and deploy
+            </button>
+        </form>
+        <% } else { %>
+        <strong>There is no git checkout at <code><%= project.path %></code>.</strong>
+        Put one there, or set a repository URL in the settings below and
+        <%= app.name %> will clone it on the next deploy.
+        <% } %>
+    </div>
+</div>
+<% } %>
 <div class="grid-main">
     <div class="stack">
         <%# ------------------------------------------------------ containers %>
@@ -179,7 +208,8 @@
                         <span class="n"><%= index + 1 %></span>
                         <div class="col" style="min-width:0">
                             <span class="strong"><%= step.name %></span>
-                            <code><%= step.command %> <%= step.args.join(" ") %></code>
+                            <%# A step is either a command or something Nimbus2k does itself. %>
+                            <code><%= step.describe || (step.command + " " + step.args.join(" ")) %></code>
                         </div>
                     </div>
                     <% }) %>
@@ -207,6 +237,35 @@
         <% } %>
 
         <div class="card">
+            <div class="card-head">
+                <h2><svg class="i" aria-hidden="true"><use href="#i-key"></use></svg> Environment</h2>
+                <span class="badge plain"><%= env.length %> variable<%= env.length === 1 ? "" : "s" %></span>
+            </div>
+            <div class="card-body">
+                <p class="t-sm muted" style="margin-bottom:12px">
+                    Written to <code><%= project.path %>/.env</code> at the start of every deploy,
+                    just before <code>docker compose up</code>. Kept here rather than in the
+                    repository, and it survives a fresh clone.
+                </p>
+
+                <form method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/env">
+                    <%- include("../partials/env-editor", { rows: env, blanks: env.length ? 1 : 3, isSecret: isSecret }) %>
+
+                    <div class="form-actions" style="margin-top:14px">
+                        <button class="btn" type="submit">Save environment</button>
+                        <label class="check inline">
+                            <input type="checkbox" name="deploy_now" <%= project.enabled ? "" : "disabled" %>>
+                            <span>deploy now</span>
+                        </label>
+                    </div>
+                    <p class="t-xs dim" style="margin-top:8px">
+                        Saving alone changes nothing on disk — the file is written by the next deploy.
+                    </p>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-head"><h2><svg class="i" aria-hidden="true"><use href="#i-settings"></use></svg> Settings</h2></div>
             <div class="card-body">
                 <form class="form-grid" method="post" action="/ui/projects/<%= encodeURIComponent(project.name) %>/settings">
@@ -214,6 +273,13 @@
                         Branch
                         <input type="text" name="branch" value="<%= project.branch %>" autocomplete="off">
                         <span class="hint">Only pushes to this branch deploy.</span>
+                    </label>
+
+                    <label class="field">
+                        Repository URL
+                        <input type="text" name="repo_url" value="<%= project.repo_url || "" %>" autocomplete="off"
+                               spellcheck="false" placeholder="git@github.com:owner/<%= project.name %>.git">
+                        <span class="hint">Used to clone the checkout when it is missing.</span>
                     </label>
 
                     <label class="field">
@@ -273,7 +339,10 @@
                         <input type="checkbox" name="clean_untracked" <%= project.clean_untracked ? "checked" : "" %>>
                         <span>
                             <span class="title">Clean untracked files</span>
-                            <span class="hint">Runs <code>git clean -fd</code>; this deletes a repo-local <code>.env</code>.</span>
+                            <span class="hint">
+                                Runs <code>git clean -fd</code> before the build. Any
+                                <code>.env</code> it deletes is rewritten from the variables above.
+                            </span>
                         </span>
                     </label>
 
