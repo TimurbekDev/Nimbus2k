@@ -20,17 +20,19 @@ function parseImages(stdout) {
     const trimmed = stdout.trim();
     if (!trimmed) return [];
 
+    // A stack with nothing built prints a bare `null` on some compose versions,
+    // and a JSON null is not a row to read fields off.
+    const rows = (value) => (Array.isArray(value) ? value : [value]).filter((item) => item && typeof item === "object");
+
     try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed;
-        return [parsed];
+        return rows(JSON.parse(trimmed));
     } catch {
         // Fall through to the line-oriented form.
     }
 
     return trimmed.split("\n").flatMap((line) => {
         try {
-            return [JSON.parse(line)];
+            return rows(JSON.parse(line));
         } catch {
             return [];
         }
@@ -40,6 +42,8 @@ function parseImages(stdout) {
 // An image built from the compose file, named and identified. Anything without
 // both is not something a rollback can point a tag back at.
 function usable(image) {
+    if (!image || typeof image !== "object") return null;
+
     const repository = image.Repository || image.repository;
     const tag = image.Tag || image.tag;
     const id = image.ID || image.Id || image.id;
