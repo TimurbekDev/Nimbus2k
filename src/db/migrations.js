@@ -154,6 +154,21 @@ const migrations = [
             CREATE INDEX idx_project_env ON project_env(project_id, position);
         `),
     },
+
+    {
+        id: 7,
+        name: "staged deploys with rollback",
+        up: (db) => db.exec(`
+            -- Splits the build from the swap: the image is built while the old
+            -- containers are still serving, and the new ones have to come up
+            -- healthy or the previous images are put back.
+            ALTER TABLE projects ADD COLUMN safe_deploy INTEGER NOT NULL DEFAULT 1;
+
+            -- Seconds \`docker compose up --wait\` is given to see every service
+            -- healthy before the deploy is called a failure.
+            ALTER TABLE projects ADD COLUMN health_timeout INTEGER NOT NULL DEFAULT 90;
+        `),
+    },
 ];
 
 function migrate(db, log) {

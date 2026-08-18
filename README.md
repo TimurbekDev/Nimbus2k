@@ -5,8 +5,10 @@ A self-hosted deployment and container control plane for a single docker host.
 Nimbus2k does two jobs, and the whole point is that it does them in one place:
 
 - **Deploys.** A GitHub push lands on `/webhook`, Nimbus2k verifies the
-  signature, fast-forwards the checkout and runs `docker compose up -d --build`.
-  Every run is recorded with its full log.
+  signature, fast-forwards the checkout, builds the new images while the running
+  stack keeps serving, and swaps only once the new containers report healthy —
+  otherwise the previous images go back on. Every run is recorded with its full
+  log.
 - **Fleet.** Every container the docker daemon knows about, grouped by compose
   stack, by your own grouping, by the project that deploys it, by state or by
   image — with live CPU and memory, streamed logs, and start/stop/restart.
@@ -141,11 +143,14 @@ Registering then **schedules the first deploy immediately**, and that run clones
 the repository before doing anything else:
 
 ```
-[1/5] clone: git clone --branch main -- git@github.com:acme/billing-api.git /srv/projects/billing-api
-[2/5] fetch: git fetch --prune origin
-[3/5] reset: git reset --hard origin/main
-[4/5] build: docker compose up -d --build --remove-orphans
-[5/5] prune: docker image prune -f
+[1/8] clone:    git clone --branch main -- git@github.com:acme/billing-api.git /srv/projects/billing-api
+[2/8] fetch:    git fetch --prune origin
+[3/8] reset:    git reset --hard origin/main
+[4/8] pull:     docker compose pull --ignore-pull-failures
+[5/8] snapshot: tag the running images so this deploy can be undone
+[6/8] build:    docker compose build
+[7/8] up:       docker compose up -d --wait --wait-timeout 90 --remove-orphans
+[8/8] prune:    docker image prune -f
 ```
 
 The clone step only appears while the checkout is missing; once it exists, every
@@ -178,9 +183,9 @@ into the box), and they are written into the checkout as one file at deploy
 time:
 
 ```
-[4/6] clean: git clean -fd
-[5/6] env:   write .env — PORT, DATABASE_PASSWORD, GREETING
-[6/6] build: docker compose up -d --build --remove-orphans
+[3/9] clean: git clean -fd
+[4/9] env:   write .env — PORT, DATABASE_PASSWORD, GREETING
+[5/9] pull:  docker compose pull --ignore-pull-failures
 ```
 
 The order is the point. The file is written **after** `git clean -fd`, which
@@ -219,9 +224,15 @@ business.
    git reset --hard origin/<branch>
    git clean -fd                                 # only when "clean untracked" is on
    write .env                                    # only when the project has variables
-   docker compose up -d --build --remove-orphans
+   docker compose pull --ignore-pull-failures    # staged deploy
+   tag the running images as :nimbus-prev        # staged deploy
+   docker compose build                          # staged deploy
+   docker compose up -d --wait --wait-timeout N  # staged deploy
    docker image prune -f                         # only when "prune images" is on
    ```
+
+   With **staged deploy** off, those four middle steps collapse back into the
+   one-shot `docker compose up -d --build --remove-orphans`.
 
 Each line of output is streamed to every open browser tab over server-sent
 events and stored with the run when it ends.
@@ -231,6 +242,47 @@ single follow-up run, so three commits landing during a build produce one more
 deploy rather than three. A step that runs longer than `STEP_TIMEOUT_MS` is
 killed, and so is its whole process group — git shells out to ssh and compose to
 buildkit, and killing only the direct child would leave the run hanging.
+
+### Staged deploys and rollback
+
+On by default, per project ("Staged deploy with rollback" on the project page).
+The slow half of a deploy — pulling base images and building — happens while the
+old containers are still serving. Only then are they replaced, and the replacement
+has to prove itself:
+
+- **`snapshot`** tags every image the stack is running as
+  `<image>:nimbus-prev` and remembers which image id each service tag pointed
+  at. The tag is what keeps the old image alive: without it the image is
+  dangling the moment the build takes its name, and `docker image prune -f`
+  would delete the only thing a rollback could return to.
+- **`up --wait`** returns only once every service is running, and *healthy*
+  where the compose file defines a `healthcheck`. Anything else — a container
+  that exits, a healthcheck that never passes within the project's **health
+  timeout** (90s by default) — fails the step.
+- **Rollback** then points each service tag back at its previous image id and
+  runs `docker compose up -d --force-recreate`. The deploy is recorded as
+  `failed` with `— rolled back to the previous images`, and production is
+  running the code it was running before the push.
+
+What this is and is not:
+
+- A build that fails never touches the running stack at all — that was already
+  true, and staging makes it the common case rather than the lucky one.
+- The swap itself is still a `docker compose up`, so a container is stopped and
+  a new one started: expect **seconds of downtime**, not zero. True zero-downtime
+  needs a second copy of the service running at the same time, which needs a
+  reverse proxy in front and no published host port to fight over.
+- **Without a `healthcheck` in the compose file, `--wait` can only confirm the
+  container did not exit.** A service that starts and then throws on its first
+  request looks healthy to docker. Add a healthcheck to the services that matter.
+- A stack with a one-shot service — a migration container that runs and exits —
+  will fail `--wait` unless the service is declared with
+  `restart: "no"` and depended on through `service_completed_successfully`, or
+  staged deploy is turned off for that project.
+- A **cancelled** run is left where the operator stopped it; only a failure rolls
+  back.
+- One generation of images is kept per project. `:nimbus-prev` survives the prune
+  step on purpose, so a staged project holds its current and its previous image.
 
 ---
 

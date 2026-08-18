@@ -68,6 +68,8 @@ router.post("/", (req, res, next) => {
         group_id: body.group_id ?? null,
         prune_images: body.prune_images ?? true,
         clean_untracked: body.clean_untracked ?? false,
+        safe_deploy: body.safe_deploy ?? true,
+        health_timeout: v.integer(body.health_timeout, 90, { min: 10, max: 3600 }),
     });
 
     // `env` is an object rather than a list: `{ "PORT": "8080" }` is what a
@@ -123,12 +125,19 @@ router.patch("/:name", (req, res, next) => {
         }
     }
 
+    // The one numeric setting, and the one a caller can send as anything.
+    if (patch.health_timeout !== undefined) {
+        patch.health_timeout = v.integer(patch.health_timeout, project.health_timeout, { min: 10, max: 3600 });
+    }
+
     audit.record({ action: "project.update", target: project.name, actor: "api", ip: req.ip });
     res.json(projects.update(project.name, patch));
 });
 
 router.delete("/:name", (req, res) => {
     if (!projects.remove(req.params.name)) return res.status(404).json({ error: "Not found" });
+
+    deploy.forget(req.params.name);
 
     audit.record({ action: "project.delete", target: req.params.name, actor: "api", ip: req.ip });
     res.status(204).end();

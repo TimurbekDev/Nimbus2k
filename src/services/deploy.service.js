@@ -7,6 +7,7 @@ const { redact } = require("../lib/giturl");
 const envfile = require("../lib/envfile");
 const { publish } = require("../lib/bus");
 const logger = require("../lib/logger");
+const rollbacks = require("./rollback.service");
 const deploymentsRepo = require("../db/deployments.repo");
 const projectsRepo = require("../db/projects.repo");
 const projectEnv = require("../db/env.repo");
@@ -122,7 +123,38 @@ function buildPlan(project, branch) {
         });
     }
 
-    plan.push({ name: "build", command: "docker", args: [...compose, "up", "-d", "--build", "--remove-orphans"] });
+    if (project.safe_deploy) {
+        const timeout = Math.max(10, Number(project.health_timeout) || 90);
+
+        // The old stack keeps serving through the two slow steps - the pull and
+        // the build - and is only replaced once there is something to replace
+        // it with. `pull` failing is not a failure: a service that is built
+        // here has no image to pull, and says so.
+        plan.push(
+            {
+                name: "pull",
+                command: "docker",
+                args: [...compose, "pull", "--ignore-pull-failures"],
+            },
+            {
+                name: "snapshot",
+                describe: "tag the running images so this deploy can be undone",
+                run: () => rollbacks.snapshot(project, compose),
+            },
+            { name: "build", command: "docker", args: [...compose, "build"] },
+            {
+                name: "up",
+                // `--wait` is what makes the swap verifiable: it returns only
+                // once every service is running, and healthy where the compose
+                // file defines a healthcheck. Without one, docker can only
+                // confirm the container did not exit.
+                command: "docker",
+                args: [...compose, "up", "-d", "--wait", "--wait-timeout", String(timeout), "--remove-orphans"],
+            },
+        );
+    } else {
+        plan.push({ name: "build", command: "docker", args: [...compose, "up", "-d", "--build", "--remove-orphans"] });
+    }
 
     if (project.prune_images) {
         plan.push({ name: "prune", command: "docker", args: ["image", "prune", "-f"] });
@@ -153,6 +185,24 @@ async function runStep(entry, logSink, cwd, step, index, total) {
     });
 
     entry.stop = null;
+}
+
+// Puts the previous images back and brings the stack up on them. Only projects
+// deploying in stages have a snapshot to return to; for the rest a failed build
+// has already left whatever it left.
+async function restore(project, sink, deploymentId) {
+    if (!project.safe_deploy || !rollbacks.has(project.name)) return false;
+
+    const compose = ["compose"];
+    if (project.compose_file) compose.push("-f", project.compose_file);
+
+    sink.write("↩ rolling back to the images that were running before this deploy");
+    publish("step", { id: deploymentId, step: "rollback", index: 0, total: 1 });
+
+    const done = await rollbacks.rollback(project, compose, (line) => sink.write(line));
+    if (done) sink.write("↩ previous stack is back up");
+
+    return done;
 }
 
 // ------------------------------------------------------------------ run
@@ -199,6 +249,19 @@ async function runDeploy(entry, project, job) {
         // what tells the two apart.
         status = entry.cancelled ? "cancelled" : "failed";
         error = entry.cancelled ? "cancelled by an operator" : err.message;
+
+        // A failed swap leaves the new containers up and broken, so the images
+        // kept by the snapshot step go back on and the stack is recreated from
+        // them. A cancelled run is left alone: the operator stopped it and is
+        // watching, and recreating containers underneath them would surprise.
+        if (status === "failed") {
+            const restored = await restore(project, sink, id).catch((restoreErr) => {
+                sink.write(`✖ rollback failed: ${restoreErr.message}`);
+                return false;
+            });
+
+            if (restored) error = `${error} — rolled back to the previous images`;
+        }
     }
 
     const durationMs = Date.now() - startedAt;
@@ -295,4 +358,7 @@ const active = () => [...queue.entries()]
 
 const liveLog = (id) => liveLogs.get(id) || null;
 
-module.exports = { schedule, cancel, isRunning, runningNames, active, liveLog, buildPlan, needsClone };
+// A project taken out of the registry has nothing left to roll back to.
+const forget = (name) => rollbacks.forget(name);
+
+module.exports = { schedule, cancel, isRunning, runningNames, active, liveLog, buildPlan, needsClone, forget };

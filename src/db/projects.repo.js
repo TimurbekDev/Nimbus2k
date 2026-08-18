@@ -8,6 +8,7 @@ const hydrate = (row) => row && {
     prune_images: Boolean(row.prune_images),
     clean_untracked: Boolean(row.clean_untracked),
     auto_deploy: Boolean(row.auto_deploy),
+    safe_deploy: Boolean(row.safe_deploy),
     pinned: Boolean(row.pinned),
     group: row.group_id ? { id: row.group_id, name: row.group_name, color: row.group_color } : null,
 };
@@ -15,6 +16,7 @@ const hydrate = (row) => row && {
 const WRITABLE = [
     "branch", "path", "compose_file", "enabled", "prune_images", "clean_untracked",
     "description", "group_id", "auto_deploy", "pinned", "stack", "repo_url",
+    "safe_deploy", "health_timeout",
 ];
 
 const SELECT = `
@@ -63,13 +65,15 @@ const projects = {
         clean_untracked = false,
         description = null,
         group_id = null,
+        safe_deploy = true,
+        health_timeout = 90,
     }) {
         run(`
             INSERT INTO projects (name, branch, path, repo_url, compose_file, prune_images,
-                                  clean_untracked, description, group_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  clean_untracked, description, group_id, safe_deploy, health_timeout)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, name, branch, checkout, repo_url, compose_file, prune_images ? 1 : 0,
-            clean_untracked ? 1 : 0, description, group_id);
+            clean_untracked ? 1 : 0, description, group_id, safe_deploy ? 1 : 0, health_timeout);
 
         return projects.byName(name);
     },

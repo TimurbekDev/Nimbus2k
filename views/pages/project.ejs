@@ -215,7 +215,8 @@
                     <% }) %>
                 </div>
                 <p class="t-xs dim" style="margin-top:10px">
-                    Run in the checkout, in order. A step that fails stops the run.
+                    Run in the checkout, in order. A step that fails stops the run<%= project.safe_deploy
+                        ? ", and the images from before it are put back." : "." %>
                 </p>
             </div>
         </div>
@@ -328,10 +329,34 @@
                     </label>
 
                     <label class="check">
+                        <input type="checkbox" name="safe_deploy" <%= project.safe_deploy ? "checked" : "" %>>
+                        <span>
+                            <span class="title">Staged deploy with rollback</span>
+                            <span class="hint">
+                                Pulls and builds while the running stack keeps serving, then swaps with
+                                <code>--wait</code>. If the new containers do not come up healthy, the images
+                                from before the deploy are put back and the stack is recreated on them.
+                                Needs a <code>healthcheck</code> in the compose file to mean more than
+                                &ldquo;it did not exit&rdquo;.
+                            </span>
+                        </span>
+                    </label>
+
+                    <label class="field">
+                        Health timeout
+                        <input type="number" name="health_timeout" min="10" max="3600" step="10"
+                               value="<%= project.health_timeout %>">
+                        <span class="hint">Seconds the new containers get to become healthy before the deploy rolls back.</span>
+                    </label>
+
+                    <label class="check">
                         <input type="checkbox" name="prune_images" <%= project.prune_images ? "checked" : "" %>>
                         <span>
                             <span class="title">Prune images after build</span>
-                            <span class="hint">Runs <code>docker image prune -f</code> once the stack is up.</span>
+                            <span class="hint">
+                                Runs <code>docker image prune -f</code> once the stack is up. The previous
+                                images survive it: a staged deploy keeps them tagged <code>:nimbus-prev</code>.
+                            </span>
                         </span>
                     </label>
 

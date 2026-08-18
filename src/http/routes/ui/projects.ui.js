@@ -315,6 +315,10 @@ router.post("/:name/settings", sameOrigin, (req, res, next) => {
         auto_deploy: v.checkbox(req.body?.auto_deploy),
         prune_images: v.checkbox(req.body?.prune_images),
         clean_untracked: v.checkbox(req.body?.clean_untracked),
+        safe_deploy: v.checkbox(req.body?.safe_deploy),
+        // Long enough for a slow application to answer its healthcheck, short
+        // enough that a broken one is rolled back rather than watched.
+        health_timeout: v.integer(req.body?.health_timeout, project.health_timeout, { min: 10, max: 3600 }),
         pinned: v.checkbox(req.body?.pinned),
     });
 
@@ -360,6 +364,7 @@ router.post("/:name/delete", sameOrigin, (req, res) => {
     // Only the registry row goes; whatever the project deployed keeps running,
     // which is the safe half of "remove this from Nimbus2k".
     projects.remove(req.params.name);
+    deploy.forget(req.params.name);
     audit.record({ action: "project.delete", target: req.params.name, actor: "ui", ip: req.ip });
 
     res.redirect("/ui/projects?msg=deleted");
